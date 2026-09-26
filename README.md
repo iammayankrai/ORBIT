@@ -137,6 +137,37 @@ Or override any dimension directly: `python -m app.database.seed --customers 500
 
 Never commit `.env`. Only `.env.example` files are tracked.
 
+## Deployment (free tier, $0/month)
+
+Three services, all with permanent free tiers and no credit card: **Neon** (Postgres), **Render** (FastAPI, via the [`render.yaml`](render.yaml) blueprint in this repo), **Vercel** (frontend, via [`frontend/vercel.json`](frontend/vercel.json) for SPA routing).
+
+1. **Database — [neon.tech](https://neon.tech)**
+   Create a free project and copy its connection string (`postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require`).
+
+2. **Seed it** (from your machine, pointed at Neon instead of local Postgres):
+   ```bash
+   cd backend
+   DATABASE_URL="postgresql+psycopg2://user:pass@ep-xxx.neon.tech/dbname?sslmode=require" \
+     python -m app.database.seed --scale demo
+   ```
+
+3. **Backend — [render.com](https://render.com)**
+   New → Blueprint → connect this repo. Render reads `render.yaml` and configures the service automatically. Set these three secrets in the dashboard when prompted (they're intentionally left out of the blueprint):
+   - `DATABASE_URL` — the Neon connection string from step 1
+   - `CORS_ALLOWED_ORIGINS` — leave blank for now, come back after step 4
+   - `GEMINI_API_KEY` — optional, only needed for `AI_MODE=live`
+
+   Deploy, then note the resulting URL (`https://orbit-api-xxxx.onrender.com`).
+
+4. **Frontend — [vercel.com](https://vercel.com)**
+   New Project → import this repo → set **Root Directory** to `frontend`. Add an environment variable `VITE_API_BASE_URL` = `https://orbit-api-xxxx.onrender.com/api` (your Render URL from step 3, with `/api` appended). Deploy, then note the resulting URL (`https://orbit.vercel.app`).
+
+5. **Close the loop** — back in Render, set `CORS_ALLOWED_ORIGINS` to your Vercel URL from step 4 and save (triggers a redeploy).
+
+6. **Keep the backend warm (optional but recommended)** — Render's free tier sleeps after 15 minutes idle, giving the first visitor after a quiet spell a 30-60s wait. This repo includes [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml), which pings `/health` every 10 minutes. Add a repository secret named `BACKEND_HEALTH_URL` (Settings → Secrets and variables → Actions) set to `https://orbit-api-xxxx.onrender.com/health` and it starts working immediately — no code change needed. (GitHub Actions minutes are unlimited on public repos.)
+
+Even without step 6, a cold backend never breaks the site — the frontend's 20s request timeout means a visitor gets an instant local-fallback answer instead of a long wait, and switches back to live data once the backend has warmed up.
+
 ## Demo Mode / Live AI Mode
 
 The whole point of this project is that it demonstrates real capability without costing anything to run publicly:
