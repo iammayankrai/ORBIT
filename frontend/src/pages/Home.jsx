@@ -1,29 +1,44 @@
+import { useCallback, useState } from 'react'
 import Hero from '../components/hero/Hero.jsx'
-import TrustStrip from '../components/sections/TrustStrip.jsx'
-import ProductShowcase from '../components/sections/ProductShowcase.jsx'
-import AIAnalystSection from '../components/sections/AIAnalystSection.jsx'
-import DataDetectiveTeaser from '../components/sections/DataDetectiveTeaser.jsx'
-import InventoryIntelligence from '../components/sections/InventoryIntelligence.jsx'
-import AutomatedInsights from '../components/sections/AutomatedInsights.jsx'
-import TechnologySection from '../components/sections/TechnologySection.jsx'
-import UseCases from '../components/sections/UseCases.jsx'
+import HowItWorks from '../components/sections/HowItWorks.jsx'
+import ResultsSection from '../components/results/ResultsSection.jsx'
 import About from '../components/sections/About.jsx'
-import Pricing from '../components/sections/Pricing.jsx'
+import ClosingCTA from '../components/sections/ClosingCTA.jsx'
 
 export default function Home() {
+  const [analysis, setAnalysis] = useState(null)
+  const [datasetSource, setDatasetSource] = useState(null)
+  const [uploadKey, setUploadKey] = useState(0)
+
+  const handleAnalyzed = useCallback((source, result) => {
+    setDatasetSource(source)
+    setAnalysis(result)
+    requestAnimationFrame(() => {
+      document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
+  const handleReset = useCallback(() => {
+    setAnalysis(null)
+    setDatasetSource(null)
+    // Remounts Hero (and the UploadPanel inside it) so its internal
+    // processing/error state is wiped, not left stuck on the last run.
+    setUploadKey((k) => k + 1)
+    requestAnimationFrame(() => {
+      document.getElementById('upload')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
   return (
     <>
-      <Hero />
-      <TrustStrip />
-      <ProductShowcase />
-      <AIAnalystSection />
-      <DataDetectiveTeaser />
-      <InventoryIntelligence />
-      <AutomatedInsights />
-      <TechnologySection />
-      <UseCases />
+      <Hero key={uploadKey} onAnalyzed={handleAnalyzed} />
+      {analysis ? (
+        <ResultsSection analysis={analysis} datasetSource={datasetSource} onReset={handleReset} />
+      ) : (
+        <HowItWorks />
+      )}
       <About />
-      <Pricing />
+      <ClosingCTA />
     </>
   )
 }

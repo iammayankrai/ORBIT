@@ -19,10 +19,12 @@ function CardBody({ label, value, unit, deltaPct, goodDirection, sparkline }) {
       <p className="mt-2 whitespace-nowrap text-[24px] font-semibold tracking-tight text-ink sm:text-[28px]">
         {formatValue(value, unit)}
       </p>
-      <div className="mt-3 flex items-center gap-2">
-        <DeltaBadge value={deltaPct} goodDirection={goodDirection} />
-        <span className="text-xs text-ink-faint">vs last month</span>
-      </div>
+      {deltaPct !== null && deltaPct !== undefined && (
+        <div className="mt-3 flex items-center gap-2">
+          <DeltaBadge value={deltaPct} goodDirection={goodDirection} />
+          <span className="text-xs text-ink-faint">vs prior period</span>
+        </div>
+      )}
     </>
   )
 }

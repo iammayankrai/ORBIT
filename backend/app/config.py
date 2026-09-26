@@ -15,9 +15,6 @@ class Settings:
     # Brand — change once, the API responses and docs follow.
     BRAND_NAME: str = os.getenv("BRAND_NAME", "Orbit")
 
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+psycopg2://orbit:orbit@localhost:5432/orbit")
-
     # AI provider
     AI_MODE: str = os.getenv("AI_MODE", "demo")  # "demo" or "live"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -36,7 +33,10 @@ class Settings:
         "http://localhost:5173,http://127.0.0.1:5173",
     )
 
-    MAX_REQUEST_BODY_BYTES: int = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(16 * 1024)))
+    # Big enough for an uploaded spreadsheet (see MAX_UPLOAD_BYTES in
+    # api/routes/data.py for the actual file-size cap) plus multipart
+    # overhead — the old 16KB default was sized for JSON-only requests.
+    MAX_REQUEST_BODY_BYTES: int = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(10 * 1024 * 1024)))
 
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 

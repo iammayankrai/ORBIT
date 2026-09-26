@@ -1,67 +1,72 @@
-"""Per-client daily AI usage limit, plus a short-lived answer cache so
-repeated questions (e.g. the suggested-question chips, which many visitors
-click) don't re-invoke the AI provider. Both live in the same small table —
-see AIQueryLog.
+"""In-memory per-client daily AI usage limit, plus a short-lived answer
+cache keyed by (dataset, question) so repeated questions against the same
+dataset don't re-invoke the AI provider.
 
-This is intentionally simple (a Postgres table, not Redis) because the whole
-point of this MVP is to run on free tiers. It's swappable for Redis later
-without touching callers, since both functions here take a `Session`.
+In-memory, not a database, because this MVP has no database anymore — the
+whole analysis pipeline is stateless (see data_analysis_service.py) and
+this API runs as a single free-tier instance. State resets on a redeploy or
+cold-start restart; that's an acceptable MVP tradeoff. Swap for Redis if
+this ever runs as more than one process.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
-from datetime import datetime, timedelta, timezone
-
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+import time
+from collections import defaultdict, deque
 
 from app.config import settings
-from app.models.db_models import AIQueryLog
+
+_MAX_CACHE_ENTRIES = 500
 
 
 def hash_client(identifier: str) -> str:
     return hashlib.sha256(f"orbit-client:{identifier}".encode()).hexdigest()[:32]
 
 
-def hash_question(question: str) -> str:
-    return hashlib.sha256(question.strip().lower().encode()).hexdigest()
+def hash_dataset(file_bytes: bytes | None, dataset_label: str) -> str:
+    """Stable identity for a dataset: the bundled sample is identified by
+    its label, an uploaded file by a hash of its bytes — so re-asking the
+    same question against the same file hits the cache, and a different
+    file never collides with it."""
+    if file_bytes is None:
+        return f"label:{dataset_label}"
+    return hashlib.sha256(file_bytes).hexdigest()[:24]
 
 
-def is_rate_limited(db: Session, client_key: str) -> bool:
-    since = datetime.now(timezone.utc) - timedelta(days=1)
-    count = db.execute(
-        select(func.count()).select_from(AIQueryLog).where(
-            AIQueryLog.client_key == client_key, AIQueryLog.created_at >= since
-        )
-    ).scalar_one()
-    return count >= settings.AI_DAILY_LIMIT
+def hash_question(dataset_key: str, question: str) -> str:
+    return hashlib.sha256(f"{dataset_key}:{question.strip().lower()}".encode()).hexdigest()
 
 
-def get_cached_answer(db: Session, question_hash: str) -> dict | None:
-    since = datetime.now(timezone.utc) - timedelta(seconds=settings.AI_CACHE_TTL_SECONDS)
-    row = db.execute(
-        select(AIQueryLog.answer_json)
-        .where(AIQueryLog.question_hash == question_hash, AIQueryLog.created_at >= since)
-        .order_by(AIQueryLog.created_at.desc())
-        .limit(1)
-    ).first()
-    if not row:
+_daily_hits: dict[str, deque[float]] = defaultdict(deque)
+_answer_cache: dict[str, tuple[float, dict]] = {}
+
+
+def is_rate_limited(client_key: str) -> bool:
+    now = time.time()
+    hits = _daily_hits[client_key]
+    while hits and now - hits[0] > 86400:
+        hits.popleft()
+    return len(hits) >= settings.AI_DAILY_LIMIT
+
+
+def record_hit(client_key: str) -> None:
+    _daily_hits[client_key].append(time.time())
+
+
+def get_cached_answer(question_hash: str) -> dict | None:
+    entry = _answer_cache.get(question_hash)
+    if not entry:
         return None
-    try:
-        return json.loads(row[0])
-    except (json.JSONDecodeError, TypeError):
+    cached_at, answer = entry
+    if time.time() - cached_at > settings.AI_CACHE_TTL_SECONDS:
+        _answer_cache.pop(question_hash, None)
         return None
+    return answer
 
 
-def log_query(db: Session, client_key: str, question: str, answer: dict) -> None:
-    entry = AIQueryLog(
-        client_key=client_key,
-        question=question[:500],
-        question_hash=hash_question(question),
-        answer_json=json.dumps(answer, default=str),
-        created_at=datetime.now(timezone.utc),
-    )
-    db.add(entry)
-    db.commit()
+def cache_answer(question_hash: str, answer: dict) -> None:
+    if len(_answer_cache) >= _MAX_CACHE_ENTRIES:
+        oldest_key = min(_answer_cache, key=lambda k: _answer_cache[k][0])
+        _answer_cache.pop(oldest_key, None)
+    _answer_cache[question_hash] = (time.time(), answer)

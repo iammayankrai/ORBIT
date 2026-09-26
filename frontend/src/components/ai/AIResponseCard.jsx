@@ -2,22 +2,40 @@ import { useState } from 'react'
 import { ChevronDown, Lightbulb } from 'lucide-react'
 import RevenueTrendChart from '../charts/RevenueTrendChart.jsx'
 import DumbbellChart from '../charts/DumbbellChart.jsx'
-import AgeingColumns from '../charts/AgeingColumns.jsx'
+import CategoryDonut from '../charts/CategoryDonut.jsx'
 import RankedBarChart from '../charts/RankedBarChart.jsx'
+import { formatByUnit } from '../../utils/format.js'
 
 function Chart({ chart }) {
   if (!chart || chart.type === 'none') return null
-  if (chart.type === 'trend') return <RevenueTrendChart data={chart.data} height={220} />
-  if (chart.type === 'dumbbell') return <DumbbellChart data={chart.data} />
-  if (chart.type === 'columns') return <AgeingColumns data={chart.data} nameKey={chart.nameKey} valueKey={chart.valueKey} height={200} />
-  if (chart.type === 'bars-horizontal') {
+  if (chart.type === 'trend') {
+    return <RevenueTrendChart data={chart.data} height={220} xKey={chart.xKey} yKey={chart.yKey} unit={chart.unit} />
+  }
+  if (chart.type === 'donut') {
+    return <CategoryDonut data={chart.data} nameKey={chart.nameKey} valueKey={chart.valueKey} unit={chart.unit} height={200} />
+  }
+  if (chart.type === 'dumbbell') {
+    return (
+      <DumbbellChart
+        data={chart.data}
+        nameKey={chart.nameKey}
+        priorKey={chart.priorKey}
+        currentKey={chart.currentKey}
+        changeKey={chart.changeKey}
+        priorLabel={chart.priorLabel}
+        currentLabel={chart.currentLabel}
+      />
+    )
+  }
+  if (chart.type === 'bar-horizontal') {
     return (
       <RankedBarChart
         data={chart.data}
         nameKey={chart.nameKey}
         valueKey={chart.valueKey}
         suffix={chart.suffix}
-        colorBySign={chart.valueKey === 'changePct'}
+        colorBySign={Boolean(chart.colorBySign)}
+        formatter={chart.unit ? (v) => formatByUnit(v, chart.unit) : undefined}
       />
     )
   }
@@ -32,8 +50,8 @@ const IMPACT_DOT = {
 }
 
 export default function AIResponseCard({ response }) {
-  const [sqlOpen, setSqlOpen] = useState(false)
-  const { answer, metrics, drivers, chart, recommendation, sql } = response
+  const [basisOpen, setBasisOpen] = useState(false)
+  const { answer, metrics, drivers, chart, recommendation, basis } = response
 
   return (
     <div className="flex flex-col gap-5 rounded-2xl border border-border bg-white p-5 sm:p-6">
@@ -85,22 +103,18 @@ export default function AIResponseCard({ response }) {
         </div>
       )}
 
-      {sql && (
+      {basis && (
         <div className="border-t border-border pt-4">
           <button
             type="button"
-            onClick={() => setSqlOpen((v) => !v)}
+            onClick={() => setBasisOpen((v) => !v)}
             className="flex items-center gap-1.5 text-xs font-medium text-ink-faint transition-colors hover:text-ink-soft"
-            aria-expanded={sqlOpen}
+            aria-expanded={basisOpen}
           >
-            <ChevronDown size={14} className={`transition-transform ${sqlOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-            SQL used
+            <ChevronDown size={14} className={`transition-transform ${basisOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            How this was calculated
           </button>
-          {sqlOpen && (
-            <pre className="mt-2 overflow-x-auto rounded-lg bg-ink px-4 py-3 text-xs leading-relaxed text-white/80">
-              <code>{sql}</code>
-            </pre>
-          )}
+          {basisOpen && <p className="mt-2 text-xs leading-relaxed text-ink-faint">{basis}</p>}
         </div>
       )}
     </div>

@@ -6,17 +6,14 @@ import Logo from './Logo.jsx'
 import Button from '../ui/Button.jsx'
 
 const NAV_LINKS = [
-  { label: 'Product', href: '/#product' },
-  { label: 'AI Analyst', to: '/analyst' },
-  { label: 'Solutions', href: '/#solutions' },
-  { label: 'Technology', href: '/#technology' },
-  { label: 'Demo', to: '/demo' },
+  { label: 'How it works', href: '#how-it-works' },
+  { label: 'Sample insights', href: '#results' },
+  { label: 'About', href: '#about' },
 ]
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
-  const [signInHint, setSignInHint] = useState(false)
   const location = useLocation()
 
   useEffect(() => {
@@ -39,58 +36,23 @@ export default function Navbar() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 sm:px-8 lg:px-10" aria-label="Primary">
-        <Link to="/" aria-label={`Home`}>
+        <Link to="/" aria-label="Home">
           <Logo />
         </Link>
 
         <ul className="hidden items-center gap-8 lg:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.label}>
-              {link.to ? (
-                <Link to={link.to} className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink">
-                  {link.label}
-                </Link>
-              ) : (
-                <a href={link.href} className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink">
-                  {link.label}
-                </a>
-              )}
+              <a href={link.href} className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink">
+                {link.label}
+              </a>
             </li>
           ))}
         </ul>
 
-        <div className="hidden items-center gap-3 lg:flex">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setSignInHint((v) => !v)}
-              className="rounded-full px-4 py-2 text-[15px] font-medium text-ink-soft transition-colors hover:text-ink"
-              aria-expanded={signInHint}
-            >
-              Sign In
-            </button>
-            <AnimatePresence>
-              {signInHint && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.15 }}
-                  role="status"
-                  className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-border bg-white p-4 text-left shadow-card-lg"
-                >
-                  <p className="text-sm text-ink-soft">
-                    Accounts are coming soon. For now, explore the live product with the demo — no sign-in required.
-                  </p>
-                  <Link to="/demo" className="mt-2 inline-block text-sm font-medium text-accent hover:text-accent-dark">
-                    Explore the demo →
-                  </Link>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-          <Button to="/analyst" variant="accent" size="md">
-            Try Demo
+        <div className="hidden lg:flex">
+          <Button href="#upload" variant="accent" size="md">
+            Upload Your Data
           </Button>
         </div>
 
@@ -117,24 +79,15 @@ export default function Navbar() {
             <ul className="flex flex-col gap-1 px-6 py-4">
               {NAV_LINKS.map((link) => (
                 <li key={link.label}>
-                  {link.to ? (
-                    <Link to={link.to} className="block rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink hover:bg-surface-alt">
-                      {link.label}
-                    </Link>
-                  ) : (
-                    <a href={link.href} className="block rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink hover:bg-surface-alt">
-                      {link.label}
-                    </a>
-                  )}
+                  <a href={link.href} className="block rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink hover:bg-surface-alt">
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>
             <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
-              <Button variant="secondary" size="md" className="w-full">
-                Sign In
-              </Button>
-              <Button to="/analyst" variant="accent" size="md" className="w-full">
-                Try Demo
+              <Button href="#upload" variant="accent" size="md" className="w-full">
+                Upload Your Data
               </Button>
             </div>
           </motion.div>

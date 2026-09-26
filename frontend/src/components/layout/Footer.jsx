@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { LinkedinIcon } from './BrandIcons.jsx'
 import Logo from './Logo.jsx'
 import { BRAND_NAME, COMPANY, FOUNDER } from '../../config/brand.js'
@@ -8,17 +7,15 @@ const COLUMNS = [
   {
     heading: 'Product',
     links: [
-      { label: 'AI Analyst', to: '/analyst' },
-      { label: 'Dashboards', href: '/#product' },
-      { label: 'Inventory', to: '/inventory' },
-      { label: 'Data Detective', to: '/data-detective' },
+      { label: 'Upload your data', href: '#upload' },
+      { label: 'How it works', href: '#how-it-works' },
+      { label: 'Sample insights', href: '#results' },
     ],
   },
   {
     heading: 'Company',
     links: [
-      { label: 'About', href: '/#about' },
-      { label: 'Technology', href: '/#technology' },
+      { label: 'About', href: '#about' },
       { label: 'Contact', href: `mailto:${COMPANY.email}` },
     ],
   },
@@ -32,7 +29,8 @@ export default function Footer() {
           <div className="flex flex-col gap-4 sm:col-span-2 lg:col-span-2">
             <Logo dark />
             <p className="max-w-xs text-sm leading-relaxed text-white/50">
-              Turn your business data into decisions — with an AI analyst that explains the why, not just the what.
+              Upload an Excel or CSV file and turn raw business data into dashboards, insights and clear answers — in
+              seconds.
             </p>
             {COMPANY.linkedin && (
               <div className="flex items-center gap-3 pt-1">
@@ -53,15 +51,9 @@ export default function Footer() {
               <ul className="mt-4 flex flex-col gap-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    {link.to ? (
-                      <Link to={link.to} className="text-sm text-white/50 transition-colors hover:text-white">
-                        {link.label}
-                      </Link>
-                    ) : (
-                      <a href={link.href} className="text-sm text-white/50 transition-colors hover:text-white">
-                        {link.label}
-                      </a>
-                    )}
+                    <a href={link.href} className="text-sm text-white/50 transition-colors hover:text-white">
+                      {link.label}
+                    </a>
                   </li>
                 ))}
               </ul>

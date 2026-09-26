@@ -1,19 +1,28 @@
 import { useRef, useState } from 'react'
 import { AlertTriangle, ArrowUp, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { askAIAnalyst } from '../../services/aiService.js'
-import { SUGGESTED_QUESTIONS } from '../../data/aiResponses.js'
+import { askQuestion } from '../../services/dataService.js'
 import SuggestedQuestions from './SuggestedQuestions.jsx'
 import TypingLoader from './TypingLoader.jsx'
 import AIResponseCard from './AIResponseCard.jsx'
 
 const MAX_LENGTH = 300
-const MIN_LOADING_MS = 1300
+const MIN_LOADING_MS = 1100
+
+const DEFAULT_QUESTIONS = [
+  'Why did sales decline?',
+  'Which region performs best?',
+  'What are my top products?',
+  'What should I investigate?',
+]
 
 let idCounter = 0
 const nextId = () => `msg-${++idCounter}`
 
-export default function AIChat({ title = 'Ask your business anything', showSuggestions = true }) {
+// `datasetSource` is `{ file }` or `{ useSample: true }` — whichever
+// dataset the results section above is currently showing. The backend has
+// no session state, so every question re-sends it.
+export default function AIChat({ datasetSource, title = 'Ask your data anything', showSuggestions = true }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,7 +30,7 @@ export default function AIChat({ title = 'Ask your business anything', showSugge
 
   async function submit(question) {
     const trimmed = question.trim()
-    if (!trimmed || loading) return
+    if (!trimmed || loading || !datasetSource) return
 
     const userMsg = { id: nextId(), role: 'user', text: trimmed }
     setMessages((prev) => [...prev, userMsg])
@@ -29,7 +38,12 @@ export default function AIChat({ title = 'Ask your business anything', showSugge
     setLoading(true)
 
     const started = Date.now()
-    const result = await askAIAnalyst(trimmed)
+    let result
+    try {
+      result = await askQuestion({ ...datasetSource, question: trimmed })
+    } catch (err) {
+      result = { error: true, message: err.message || 'Something went wrong. Please try again.' }
+    }
     const elapsed = Date.now() - started
     if (elapsed < MIN_LOADING_MS) {
       await new Promise((r) => setTimeout(r, MIN_LOADING_MS - elapsed))
@@ -54,8 +68,8 @@ export default function AIChat({ title = 'Ask your business anything', showSugge
 
       {messages.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border bg-surface-alt/50 px-6 py-10 text-center">
-          <p className="text-ink-soft">No insights yet.</p>
-          <p className="mt-1 text-sm text-ink-faint">Ask your first business question to generate an analysis.</p>
+          <p className="text-ink-soft">No questions asked yet.</p>
+          <p className="mt-1 text-sm text-ink-faint">Ask your first question to get an answer with the numbers behind it.</p>
         </div>
       )}
 
@@ -88,19 +102,19 @@ export default function AIChat({ title = 'Ask your business anything', showSugge
       </div>
 
       {showSuggestions && messages.length === 0 && (
-        <SuggestedQuestions questions={SUGGESTED_QUESTIONS} onSelect={submit} disabled={loading} />
+        <SuggestedQuestions questions={DEFAULT_QUESTIONS} onSelect={submit} disabled={loading} />
       )}
 
       <form onSubmit={handleSubmit} className="relative">
         <label htmlFor="ai-analyst-input" className="sr-only">
-          Ask a business question
+          Ask a question about your data
         </label>
         <input
           id="ai-analyst-input"
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value.slice(0, MAX_LENGTH))}
-          placeholder="Ask about revenue, regions, products, inventory or targets…"
+          placeholder="Ask a question about your data…"
           disabled={loading}
           className="w-full rounded-full border border-border bg-white py-3.5 pl-5 pr-14 text-[15px] text-ink placeholder:text-ink-faint focus-visible:border-accent disabled:opacity-60"
         />

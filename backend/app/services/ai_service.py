@@ -1,7 +1,8 @@
-"""AIService: the one place that decides intent, fetches real numbers via
-SQL, and asks a provider to phrase the explanation. Costs stay controlled
-because the provider is only ever asked to explain numbers that were already
-computed — never to compute them itself.
+"""AIService: decides intent from a free-text question about the uploaded
+dataset, computes the real numbers via data_analysis_service (pandas), and
+asks a provider to phrase the explanation. Costs stay controlled because a
+provider is only ever asked to explain numbers already computed here — it
+never invents or recalculates them.
 
     AIService
       -> DemoProvider   (default, free, deterministic)
@@ -13,21 +14,27 @@ from __future__ import annotations
 import re
 from typing import Any, Callable
 
-from sqlalchemy.orm import Session
+import pandas as pd
 
 from app.config import settings
-from app.services import sql_service
+from app.services import data_analysis_service as das
 from app.services.providers.base import AIProvider
 from app.services.providers.demo_provider import DemoProvider
 
 _INTENTS: list[tuple[str, re.Pattern]] = [
-    ("revenue_decline", re.compile(r"declin|drop|fell|fall|decreas|why.*revenue|q2|quarter", re.I)),
-    ("top_regions", re.compile(r"top.*region|best.*region|region.*perform|which region", re.I)),
-    ("inventory_risk", re.compile(r"inventory|ageing|aging|stock risk|slow.moving", re.I)),
-    ("declining_products", re.compile(r"product.*(attention|declin)|which products|declining sales", re.I)),
-    ("compare_yoy", re.compile(r"last year|year.over.year|yoy|annual", re.I)),
-    ("sales_manager", re.compile(r"manager|missed target|target", re.I)),
-    ("reorder", re.compile(r"reorder|restock|replenish", re.I)),
+    ("decline_reason", re.compile(r"declin|drop|fell|fall|decreas|why.*(sale|revenue|profit)|worse|went down", re.I)),
+    ("top_ranking", re.compile(r"top (products?|items?|customers?|managers?|reps?|sellers?|performers?)|best[- ]sell|highest", re.I)),
+    ("best_dimension", re.compile(r"\bbest\b|which (region|category|city|segment|zone)|perform", re.I)),
+    ("investigate", re.compile(r"investigat|anomal|unusual|attention|closer look|\brisk\b|wrong", re.I)),
+]
+
+_DIMENSION_HINTS: list[tuple[str, re.Pattern]] = [
+    ("region", re.compile(r"region|zone", re.I)),
+    ("location", re.compile(r"city|location|store|branch|outlet", re.I)),
+    ("category", re.compile(r"categor|segment|department", re.I)),
+    ("product", re.compile(r"product|item|sku", re.I)),
+    ("entity", re.compile(r"manager|\brep\b|agent|employee", re.I)),
+    ("customer", re.compile(r"customer|client|account", re.I)),
 ]
 
 
@@ -38,6 +45,13 @@ def detect_intent(question: str) -> str:
     return "fallback"
 
 
+def _dimension_hint(question: str) -> str | None:
+    for role, pattern in _DIMENSION_HINTS:
+        if pattern.search(question):
+            return role
+    return None
+
+
 def _get_provider() -> AIProvider:
     if settings.is_live_ai:
         from app.services.providers.gemini_provider import GeminiProvider  # lazy: avoid requiring the SDK/key in demo mode
@@ -46,212 +60,250 @@ def _get_provider() -> AIProvider:
     return DemoProvider()
 
 
-def _revenue_decline(db: Session) -> dict[str, Any]:
-    bounds = sql_service.get_period_bounds(db)
-    kpis = sql_service.kpi_summary(db)
-    regions = sql_service.revenue_by_region(db, bounds["current_start"], bounds["prior_start"])
-    categories = sql_service.revenue_by_category(db, bounds["current_start"], bounds["prior_start"])
+def _primary_measure(schema: das.DatasetSchema) -> das.ColumnInfo | None:
+    by_role = {m.role: m for m in schema.measures}
+    return by_role.get("revenue") or by_role.get("profit") or by_role.get("quantity") or (schema.measures[0] if schema.measures else None)
 
-    change_pct = (
-        (kpis["current_revenue"] - kpis["prior_revenue"]) / kpis["prior_revenue"] * 100
-        if kpis["prior_revenue"]
-        else 0
-    )
-    top_region = max(regions, key=lambda r: r["prior_revenue"] - r["current_revenue"]) if regions else None
-    top_category = max(categories, key=lambda r: r["prior_revenue"] - r["current_revenue"]) if categories else None
+
+def _first_dim(schema: das.DatasetSchema, *roles: str) -> das.ColumnInfo | None:
+    by_role = {d.role: d for d in schema.dimensions}
+    for role in roles:
+        if role and role in by_role:
+            return by_role[role]
+    return None
+
+
+def _scaled(value: float, unit: str) -> float:
+    return value / 1e7 if unit == "cr" else value
+
+
+def _decline_reason(df: pd.DataFrame, schema: das.DatasetSchema, question: str) -> dict[str, Any] | None:
+    primary = _primary_measure(schema)
+    bounds = das.period_bounds(df[schema.date_column]) if schema.date_column and primary else None
+    if not primary or not bounds:
+        return None
+
+    unit = das.unit_for(primary.role)
+    series = pd.to_numeric(df[primary.name], errors="coerce").fillna(0)
+    prior = float(series[bounds["prior_mask"]].sum())
+    current = float(series[bounds["current_mask"]].sum())
+    change_pct = round((current - prior) / prior * 100, 1) if prior else 0.0
+
+    geo_dim = _first_dim(schema, "region", "location")
+    cat_dim = _first_dim(schema, "category")
+    candidates: list[dict] = []
+    for dim in (geo_dim, cat_dim):
+        if dim:
+            candidates.extend(
+                {**row, "dim_noun": dim.name.lower()} for row in das.dimension_period_changes(df, dim.name, primary.name, bounds)
+            )
+    worst = min(candidates, key=lambda r: r["change_pct"]) if candidates else None
 
     context = {
-        "change_pct": round(change_pct, 1),
-        "current_revenue": kpis["current_revenue"],
-        "prior_revenue": kpis["prior_revenue"],
-        "prior_label": "last month",
+        "measure": primary.name,
+        "unit": unit,
+        "change_pct": change_pct,
+        "prior_value": _scaled(prior, unit),
+        "current_value": _scaled(current, unit),
+        "worst_mover": worst,
     }
-    drivers = []
-    if top_region and top_region["prior_revenue"] > 0:
-        region_change = (top_region["current_revenue"] - top_region["prior_revenue"]) / top_region["prior_revenue"] * 100
-        drivers.append({"label": f"{top_region['region']} region", "value": f"{region_change:.1f}%", "impact": "primary"})
-    if top_category and top_category["prior_revenue"] > 0:
-        cat_change = (top_category["current_revenue"] - top_category["prior_revenue"]) / top_category["prior_revenue"] * 100
-        drivers.append({"label": f"{top_category['category']} category", "value": f"{cat_change:.1f}%", "impact": "secondary"})
-
-    return {
-        "context": context,
-        "metrics": [
-            {"label": "Prior revenue", "value": f"₹{kpis['prior_revenue'] / 1e7:.2f} Cr"},
-            {"label": "Current revenue", "value": f"₹{kpis['current_revenue'] / 1e7:.2f} Cr"},
-            {"label": "Change", "value": f"{change_pct:.1f}%"},
-        ],
-        "drivers": drivers,
-        "chart": {
-            "type": "dumbbell",
-            # Inline answer chart: show the biggest movers only, not every
-            # region — with 20 regions the full list buries the story.
-            "data": sorted(
-                (
-                    {
-                        "name": r["region"],
-                        "june": r["prior_revenue"] / 1e7,
-                        "july": r["current_revenue"] / 1e7,
-                        "changePct": ((r["current_revenue"] - r["prior_revenue"]) / r["prior_revenue"] * 100) if r["prior_revenue"] else 0,
-                    }
-                    for r in regions
-                    if r["prior_revenue"] > 0
-                ),
-                key=lambda r: abs(r["changePct"]),
-                reverse=True,
-            )[:8],
-        },
-        "recommendation": f"Investigate the change in {top_region['region'] if top_region else 'the affected'} region and review inventory availability for the SKUs involved.",
-        "sql": "SELECT region, SUM(revenue) FROM sales JOIN regions ... GROUP BY region, month",
-    }
-
-
-def _top_regions(db: Session) -> dict[str, Any]:
-    bounds = sql_service.get_period_bounds(db)
-    attainment = sql_service.sales_manager_attainment(db, bounds["current_start"])
-    by_region: dict[str, list[float]] = {}
-    for row in attainment:
-        pct = (row["actual_amount"] / row["target_amount"] * 100) if row["target_amount"] else 0
-        by_region.setdefault(row["region"], []).append(pct)
-    ranked = sorted(
-        ({"name": region, "attainment": sum(vals) / len(vals)} for region, vals in by_region.items()),
-        key=lambda r: r["attainment"],
-        reverse=True,
-    )
-    return {
-        "context": {"ranked": ranked},
-        "metrics": [{"label": r["name"], "value": f"{r['attainment']:.0f}%"} for r in ranked[:3]],
-        "drivers": [{"label": r["name"], "value": f"{r['attainment']:.0f}% of target", "impact": "positive"} for r in ranked[:3]],
-        "chart": {"type": "bars-horizontal", "data": ranked, "nameKey": "name", "valueKey": "attainment", "suffix": "%"},
-        "recommendation": f"Study what {ranked[0]['name']} is doing differently versus {ranked[-1]['name']}." if len(ranked) > 1 else None,
-        "sql": "SELECT region, AVG(actual/target*100) FROM sales_targets JOIN orders ... GROUP BY region",
-    }
-
-
-def _inventory_risk(db: Session) -> dict[str, Any]:
-    risk_rows = sql_service.inventory_risk(db)
-    buckets = sql_service.inventory_ageing_buckets(db)
-    risk_value = sum(r["value"] for r in risk_rows)
-    return {
-        "context": {"risk_sku_count": len(risk_rows), "risk_value": risk_value},
-        "metrics": [
-            {"label": "At-risk SKUs", "value": str(len(risk_rows))},
-            {"label": "Ageing value", "value": f"₹{risk_value / 1e7:.2f} Cr"},
-        ],
-        "drivers": [{"label": r["name"], "value": f"{r['days_ageing']} days · ₹{r['value'] / 1e5:.1f} L", "impact": "negative"} for r in risk_rows[:3]],
-        "chart": {"type": "columns", "data": buckets, "nameKey": "bucket", "valueKey": "value"},
-        "recommendation": "Discount or bundle the highest-ageing SKUs before their value erodes further.",
-        "sql": "SELECT sku, EXTRACT(day FROM now()-received_date), value FROM inventory WHERE ... ORDER BY value DESC",
-    }
-
-
-def _declining_products(db: Session) -> dict[str, Any]:
-    bounds = sql_service.get_period_bounds(db)
-    rows = sql_service.declining_products(db, bounds["current_start"], bounds["prior_start"])
-    products = []
-    for r in rows:
-        change = (r["current_revenue"] - r["prior_revenue"]) / r["prior_revenue"] * 100 if r["prior_revenue"] else 0
-        if change < 0:
-            products.append({"name": r["name"], "category": r["category"], "region": r["region"], "changePct": round(change, 1)})
-    return {
-        "context": {"products": products},
-        "metrics": [{"label": p["name"], "value": f"{p['changePct']:.1f}%"} for p in products[:3]],
-        "drivers": [{"label": p["name"], "value": f"{p['category']} · {p['region']}", "impact": "negative"} for p in products[:3]],
-        "chart": {"type": "bars-horizontal", "data": products, "nameKey": "name", "valueKey": "changePct", "suffix": "%"},
-        "recommendation": "Review pricing and stock availability for the fastest-declining SKUs first.",
-        "sql": "SELECT sku, name, revenue_change_pct FROM product_performance WHERE change < 0 ORDER BY change ASC",
-    }
-
-
-def _compare_yoy(db: Session) -> dict[str, Any]:
-    trend = sql_service.revenue_trend(db, months=13)
-    if len(trend) < 13:
-        current_revenue, prior_year_revenue = (trend[-1]["revenue"], trend[0]["revenue"]) if trend else (0, 0)
-    else:
-        current_revenue, prior_year_revenue = trend[-1]["revenue"], trend[-13]["revenue"]
-    yoy_pct = (current_revenue - prior_year_revenue) / prior_year_revenue * 100 if prior_year_revenue else 0
-    return {
-        "context": {"yoy_pct": round(yoy_pct, 1), "current_revenue": current_revenue, "prior_year_revenue": prior_year_revenue},
-        "metrics": [
-            {"label": "This month", "value": f"₹{current_revenue / 1e7:.2f} Cr"},
-            {"label": "Same month last year", "value": f"₹{prior_year_revenue / 1e7:.2f} Cr"},
-            {"label": "YoY change", "value": f"{yoy_pct:.1f}%"},
-        ],
-        "drivers": [],
-        "chart": {"type": "trend", "data": [{"month": r["month"].strftime("%b '%y"), "revenue": r["revenue"] / 1e7} for r in trend]},
-        "recommendation": "Use the year-on-year trend as the health check; investigate month-over-month moves separately.",
-        "sql": "SELECT date_trunc('month', order_date), SUM(revenue) FROM sales GROUP BY 1 ORDER BY 1",
-    }
-
-
-def _sales_manager(db: Session) -> dict[str, Any]:
-    bounds = sql_service.get_period_bounds(db)
-    rows = sql_service.sales_manager_attainment(db, bounds["current_start"])
-    ranked = [
-        {"name": r["name"], "region": r["region"], "target": r["target_amount"], "actual": r["actual_amount"],
-         "attainment": (r["actual_amount"] / r["target_amount"] * 100) if r["target_amount"] else 0}
-        for r in rows
+    metrics = [
+        {"label": f"Prior period {primary.name}", "value": das.format_value(context["prior_value"], unit)},
+        {"label": f"Current period {primary.name}", "value": das.format_value(context["current_value"], unit)},
+        {"label": "Change", "value": das.format_pct(change_pct, signed=True)},
     ]
+    chart = None
+    if candidates:
+        ranked = sorted(candidates, key=lambda r: r["change_pct"])[:8]
+        chart = {
+            "type": "dumbbell",
+            "data": ranked,
+            "priorKey": "prior",
+            "currentKey": "current",
+            "nameKey": "name",
+            "changeKey": "change_pct",
+            "priorLabel": "Prior period",
+            "currentLabel": "Current period",
+        }
+    recommendation = (
+        f"Start with {worst['name']} — it's the steepest decliner at {das.format_pct(worst['change_pct'])}."
+        if worst and worst["change_pct"] < -3
+        else None
+    )
+    dims_used = ", ".join(d.name for d in (geo_dim, cat_dim) if d) or "the available categories"
+    basis = (
+        f"Split your data's date range in half and compared {primary.name} in the most recent half "
+        f"against the prior half, broken down by {dims_used}."
+    )
+
     return {
-        "context": {"ranked": ranked},
-        "metrics": [{"label": m["name"], "value": f"{m['attainment']:.0f}%"} for m in ranked[:3]],
-        "drivers": [{"label": f"{m['name']} · {m['region']}", "value": f"₹{m['actual'] / 1e5:.1f} L of ₹{m['target'] / 1e5:.1f} L", "impact": "negative"} for m in ranked[:3]],
-        "chart": {"type": "bars-horizontal", "data": ranked[:10], "nameKey": "name", "valueKey": "attainment", "suffix": "%"},
-        "recommendation": f"Review account coverage and stock allocation with {ranked[0]['name']} before next month's target-setting." if ranked else None,
-        "sql": "SELECT name, region, target, actual FROM sales_managers JOIN sales_targets ... ORDER BY attainment ASC",
+        "intent": "decline_reason",
+        "context": context,
+        "metrics": metrics,
+        "chart": chart,
+        "recommendation": recommendation,
+        "basis": basis,
     }
 
 
-def _reorder(db: Session) -> dict[str, Any]:
-    candidates = sql_service.reorder_candidates(db)
+def _best_dimension(df: pd.DataFrame, schema: das.DatasetSchema, question: str) -> dict[str, Any] | None:
+    primary = _primary_measure(schema)
+    if not primary or not schema.dimensions:
+        return None
+
+    hinted_role = _dimension_hint(question)
+    dim = _first_dim(schema, hinted_role) if hinted_role else None
+    dim = dim or _first_dim(schema, "region", "location", "category", "product", "entity", "customer")
+    if not dim:
+        return None
+
+    unit = das.unit_for(primary.role)
+    series = pd.to_numeric(df[primary.name], errors="coerce").fillna(0)
+    ranked = das.top_n_breakdown(df, dim.name, series, 10, unit)
+    if len(ranked) < 2:
+        return None
+
+    best, worst = ranked[0], ranked[-1]
+    context = {"dimension": dim.name, "measure": primary.name, "unit": unit, "best": best, "worst": worst}
+    metrics = [
+        {"label": f"Best {dim.name}", "value": f"{best['name']} · {das.format_value(best['value'], unit)}"},
+        {"label": f"Weakest {dim.name}", "value": f"{worst['name']} · {das.format_value(worst['value'], unit)}"},
+    ]
+    chart = {"type": "bar-horizontal", "data": ranked, "nameKey": "name", "valueKey": "value", "unit": unit}
+    recommendation = f"Study what {best['name']} is doing differently from {worst['name']} — that gap is your biggest lever."
+    basis = f"Grouped your data by {dim.name} and summed {primary.name} for each, ranked highest to lowest."
+
     return {
-        "context": {"candidates": candidates},
-        "metrics": [{"label": c["name"], "value": f"{c['quantity_on_hand']}/{c['reorder_point']}"} for c in candidates[:3]],
-        "drivers": [{"label": c["name"], "value": f"{c['region']} · {c['quantity_on_hand']} on hand", "impact": "negative"} for c in candidates[:3]],
-        "chart": {"type": "bars-horizontal", "data": candidates, "nameKey": "name", "valueKey": "quantity_on_hand"},
-        "recommendation": "Prioritise the SKUs furthest below their reorder point.",
-        "sql": "SELECT sku, quantity_on_hand, reorder_point FROM inventory WHERE quantity_on_hand < reorder_point",
+        "intent": "best_dimension",
+        "context": context,
+        "metrics": metrics,
+        "chart": chart,
+        "recommendation": recommendation,
+        "basis": basis,
     }
 
 
-_HANDLERS: dict[str, Callable[[Session], dict[str, Any]]] = {
-    "revenue_decline": _revenue_decline,
-    "top_regions": _top_regions,
-    "inventory_risk": _inventory_risk,
-    "declining_products": _declining_products,
-    "compare_yoy": _compare_yoy,
-    "sales_manager": _sales_manager,
-    "reorder": _reorder,
+def _top_ranking(df: pd.DataFrame, schema: das.DatasetSchema, question: str) -> dict[str, Any] | None:
+    primary = _primary_measure(schema)
+    rank_dim = _first_dim(schema, "product", "entity", "customer") or _first_dim(schema, "category", "region", "location")
+    if not primary or not rank_dim:
+        return None
+
+    unit = das.unit_for(primary.role)
+    series = pd.to_numeric(df[primary.name], errors="coerce").fillna(0)
+    ranked = das.top_n_breakdown(df, rank_dim.name, series, 8, unit)
+    if not ranked:
+        return None
+
+    context = {"dimension": rank_dim.name, "measure": primary.name, "unit": unit, "ranked": ranked}
+    metrics = [{"label": r["name"], "value": das.format_value(r["value"], unit)} for r in ranked[:3]]
+    chart = {"type": "bar-horizontal", "data": ranked, "nameKey": "name", "valueKey": "value", "unit": unit}
+    recommendation = f"{ranked[0]['name']} is your strongest performer by {primary.name} — make sure it stays well supported."
+    basis = f"Grouped your data by {rank_dim.name} and summed {primary.name}, showing the top {len(ranked)}."
+
+    return {
+        "intent": "top_ranking",
+        "context": context,
+        "metrics": metrics,
+        "chart": chart,
+        "recommendation": recommendation,
+        "basis": basis,
+    }
+
+
+def _investigate(df: pd.DataFrame, schema: das.DatasetSchema, question: str) -> dict[str, Any] | None:
+    primary = _primary_measure(schema)
+    bounds = das.period_bounds(df[schema.date_column]) if schema.date_column and primary else None
+    rank_dim = _first_dim(schema, "product", "entity", "customer") or _first_dim(schema, "region", "location", "category")
+    if not primary or not bounds or not rank_dim:
+        return None
+
+    unusual = das.detect_unusual_groups(df, rank_dim.name, primary.name, bounds)
+    ranked = sorted(unusual, key=lambda r: abs(r["change_pct"]), reverse=True)[:8]
+
+    context = {"dimension": rank_dim.name, "measure": primary.name, "unusual": ranked}
+    metrics = [{"label": r["name"], "value": das.format_pct(r["change_pct"], signed=True)} for r in ranked[:3]]
+    chart = (
+        {"type": "bar-horizontal", "data": ranked, "nameKey": "name", "valueKey": "change_pct", "suffix": "%", "colorBySign": True}
+        if ranked
+        else None
+    )
+    recommendation = (
+        f"Look into {ranked[0]['name']} first — its change is the most statistically unusual in the dataset." if ranked else None
+    )
+    basis = (
+        f"Compared each {rank_dim.name}'s change between the two halves of your data's date range and flagged "
+        "the ones whose swing is statistically unusual versus the rest."
+    )
+
+    return {
+        "intent": "investigate",
+        "context": context,
+        "metrics": metrics,
+        "chart": chart,
+        "recommendation": recommendation,
+        "basis": basis,
+    }
+
+
+def _fallback_context(df: pd.DataFrame, schema: das.DatasetSchema) -> dict[str, Any]:
+    primary = _primary_measure(schema)
+    span_label = None
+    if schema.date_column:
+        dates = df[schema.date_column].dropna()
+        if len(dates):
+            span_label = das.format_span_label((dates.max() - dates.min()).days)
+
+    context: dict[str, Any] = {
+        "rows": schema.row_count,
+        "columns": schema.column_count,
+        "span_label": span_label,
+        "measures": [m.name for m in schema.measures[:4]],
+        "dimensions": [d.name for d in schema.dimensions[:4]],
+    }
+    metrics = []
+    if primary:
+        unit = das.unit_for(primary.role)
+        total = float(pd.to_numeric(df[primary.name], errors="coerce").fillna(0).sum())
+        context["primary_measure"] = primary.name
+        context["primary_total"] = _scaled(total, unit)
+        context["primary_unit"] = unit
+        metrics.append({"label": f"Total {primary.name}", "value": das.format_value(context["primary_total"], unit)})
+
+    return {
+        "intent": "fallback",
+        "context": context,
+        "metrics": metrics,
+        "chart": None,
+        "recommendation": None,
+        "basis": "Read directly from your uploaded data's shape and detected columns.",
+    }
+
+
+_HANDLERS: dict[str, Callable[[pd.DataFrame, das.DatasetSchema, str], dict[str, Any] | None]] = {
+    "decline_reason": _decline_reason,
+    "best_dimension": _best_dimension,
+    "top_ranking": _top_ranking,
+    "investigate": _investigate,
 }
 
 
-def ask(db: Session, question: str) -> dict[str, Any]:
+def ask(df: pd.DataFrame, schema: das.DatasetSchema, question: str) -> dict[str, Any]:
     intent = detect_intent(question)
     handler = _HANDLERS.get(intent)
+    built = handler(df, schema, question) if handler else None
+    if built is None:
+        built = _fallback_context(df, schema)
 
-    if handler is None:
-        return {
-            "question": question,
-            "intent": "fallback",
-            "answer": "I can help with revenue, regions, products, inventory and sales targets. Try asking about a specific region, product or month.",
-            "metrics": [],
-            "drivers": [],
-            "chart": {"type": "none"},
-            "recommendation": None,
-            "sql": None,
-        }
-
-    built = handler(db)
     provider = _get_provider()
-    answer = provider.explain(intent=intent, question=question, context=built["context"])
+    answer = provider.explain(intent=built["intent"], question=question, context=built["context"])
 
     return {
         "question": question,
-        "intent": intent,
+        "intent": built["intent"],
         "answer": answer,
         "metrics": built["metrics"],
-        "drivers": built["drivers"],
         "chart": built["chart"],
         "recommendation": built["recommendation"],
-        "sql": built["sql"],
+        "basis": built["basis"],
     }

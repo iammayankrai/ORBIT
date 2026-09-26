@@ -1,35 +1,33 @@
 # Orbit
 
-**AI-powered business intelligence.** Ask a question in plain language, get an answer backed by real numbers — not a chatbot bolted onto a dashboard, an analyst that explains what happened, why, and what to do next.
+**Upload your Excel or CSV. Get instant dashboards, insights and AI-powered answers.** Not a fixed demo you click through — a real analysis engine that reads whatever spreadsheet you give it, detects what's in it, and builds the dashboard from that.
 
-> Turn Your Business Data Into Decisions.
+> Turn Your Data Into Decisions.
 
 ![Orbit hero](docs/screenshots/hero.png)
 
-## Features
+## How it works
 
-- **AI Business Analyst** — ask about revenue, regions, products, inventory or sales targets in natural language and get a data-backed answer with drivers, a chart, and a recommendation.
-- **Sales Intelligence** — a full dashboard (revenue trend, regional performance, top products, target vs actual) driven by realistic synthetic data.
-- **Inventory Intelligence** — ageing analysis, stock-by-category, and a risk table flagging SKUs that need attention.
-- **Data Detective** — an interactive investigation game: revenue dropped, find out why, using the same tools a real analyst would.
-- **Natural-language analytics** — the AI layer explains numbers that were already computed by SQL; it never generates the numbers itself (see [Architecture](#architecture)).
-- **Works with zero infrastructure** — no backend deployed, no API key, no database? The site still works. See [Demo Mode](#demo-mode--live-ai-mode).
+1. **Upload** — drag & drop a `.xlsx`/`.xls`/`.csv` file, or click **Try Sample Data** to use a bundled example (no file needed).
+2. **Analyze** — the backend detects your columns (which one is a date, which are regions/categories/products, which are revenue/cost/quantity measures), scores data quality, and flags statistical anomalies.
+3. **Visualize** — KPIs and charts are generated from *your* columns. A dataset with `Region`/`City` gets a geography breakdown; one with `Category` gets a category split; a `Product`/`Customer`/`Manager` column gets a top-N ranking. None of it is hardcoded to one dataset's schema.
+4. **Ask** — a plain-language question ("Why did sales decline?", "Which region performs best?", "What are my top products?", "What should I investigate?") gets answered with the real numbers behind it, not a guess.
 
-![AI Analyst answering a real question against live data](docs/screenshots/ai-analyst.png)
+![Results: data health, KPIs and charts generated from the uploaded dataset](docs/screenshots/results.png)
 
-![Data Detective — an interactive investigation](docs/screenshots/data-detective.png)
+![Ask Your Data — a plain-language question answered with real numbers and a chart](docs/screenshots/ask-your-data.png)
 
 ## Architecture
 
 ```
-React (Vite)  →  FastAPI  →  Intent detection  →  SQL (Postgres)  →  Result
-                                                          ↓
-                                              AI explanation (only when needed)
+React (Vite)  →  FastAPI  →  pandas analysis engine  →  Result
+                                      ↓
+                        AI explanation (only for "Ask Your Data")
 ```
 
-The core cost-control principle: **most questions never touch an AI model.** A question like "which region is performing best?" is answered by running a parameterized SQL query and formatting the result — the AI provider is only asked to phrase a sentence around numbers that already exist. See [`backend/app/services/ai_service.py`](backend/app/services/ai_service.py).
+**No database.** Every request — `/api/data/analyze` and `/api/data/ask` — re-parses the uploaded file (or regenerates the bundled sample) from scratch and computes everything with pandas. That's a deliberate choice, not a limitation: it means there's no session state to lose when a free-tier instance restarts, no Postgres to provision, and no risk of the AI model inventing a number — every KPI, chart value and insight is computed deterministically before the AI provider ever sees it. The provider's only job is to phrase a sentence around numbers that already exist. See [`backend/app/services/data_analysis_service.py`](backend/app/services/data_analysis_service.py) (the engine) and [`ai_service.py`](backend/app/services/ai_service.py) (intent detection + orchestration for "Ask Your Data").
 
-The AI provider itself is swappable without touching any route or service code:
+The AI provider is swappable without touching any route or service code:
 
 ```
 AIService
@@ -41,36 +39,35 @@ AIService
 ```
 frontend/
   src/
-    components/   # Navbar, Hero, dashboard, charts, ai/, detective/, sections/
-    pages/        # Home, Analyst, DataDetective, Inventory, Demo
-    services/     # api.js, aiService.js — talks to the backend, falls back to
-                  # a local demo engine (data/aiResponses.js) if it's unreachable
-    data/         # hand-tuned synthetic dataset used by the local fallback
-    config/brand.js  # change BRAND_NAME here to re-skin the whole site
+    components/
+      upload/       # UploadPanel (drag & drop + sample), ProcessingSequence (animated steps)
+      results/      # ResultsSection, HealthCard, ChartRenderer, InsightsList
+      ai/           # AIChat, AIResponseCard — "Ask Your Data"
+      charts/       # generic chart primitives (trend/bar/donut), unit-aware formatting
+      hero/, sections/, layout/, ui/
+    pages/Home.jsx  # owns the upload → analysis → results state
+    services/
+      dataService.js  # multipart calls to /api/data/analyze and /api/data/ask
+    config/brand.js   # change BRAND_NAME here to re-skin the whole site
 ```
 
 **Backend**
 ```
 backend/
   app/
-    main.py               # FastAPI app, CORS, rate-limit middleware
-    api/routes/           # health, ai, analytics, inventory
+    main.py                          # FastAPI app, CORS, rate-limit middleware
+    api/routes/
+      data.py                        # POST /api/data/analyze, POST /api/data/ask
+      health.py
     services/
-      sql_service.py      # every analytical query — parameterized, read-only
-      ai_service.py        # intent detection + orchestration
-      providers/           # base.py, demo_provider.py, gemini_provider.py
-      rate_limiter.py      # daily AI limit + short-lived answer cache
-    models/db_models.py    # SQLAlchemy models
-    database/seed.py       # synthetic data generator (configurable scale)
+      data_analysis_service.py       # column-role detection, health score, KPIs,
+                                      # chart generation, insight generation — the engine
+      ai_service.py                  # intent detection + context-building for "Ask Your Data"
+      providers/                     # base.py, demo_provider.py, gemini_provider.py
+      rate_limiter.py                # in-memory daily AI limit + short-lived answer cache
+    data/sample_sales_data.csv       # bundled "Try Sample Data" dataset (~12.5K realistic rows)
+  scripts/generate_sample_data.py    # regenerates the sample dataset from scratch
 ```
-
-## Screenshots
-
-| | |
-|---|---|
-| Landing hero | ![Hero](docs/screenshots/hero.png) |
-| AI Analyst | ![AI Analyst](docs/screenshots/ai-analyst.png) |
-| Data Detective | ![Data Detective](docs/screenshots/data-detective.png) |
 
 ## Local Development
 
@@ -82,35 +79,26 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-The frontend works standalone — with no backend running, the AI Analyst and Data Detective fall back to a local demo engine built from realistic, internally-consistent synthetic data (`src/data/`).
-
 ### Backend
 
-Requires PostgreSQL 14+ (a local install, or `docker run -e POSTGRES_USER=orbit -e POSTGRES_PASSWORD=orbit -e POSTGRES_DB=orbit -p 5432:5432 postgres:16-alpine`).
+No database required.
 
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env               # edit DATABASE_URL if needed
+cp .env.example .env
 
-python -m app.database.seed --scale small   # seeds in seconds; see below for scale options
 uvicorn app.main:app --reload --port 8000
 ```
 
 Point the frontend at it with `VITE_API_BASE_URL` (defaults to `/api`, proxied to `localhost:8000` in dev — see `frontend/vite.config.js`).
 
-#### Seed data scale
-
-The generator produces a realistic, internally-correlated dataset — sales vary by region, month, category and season; specific products are intentionally declining, stocked out, or ageing in inventory; sales targets are set from trailing performance so some managers genuinely miss them once a regional demand shock hits.
+To regenerate the bundled sample dataset (`app/data/sample_sales_data.csv`):
 
 ```bash
-python -m app.database.seed --scale small   # ~35K sale lines, seeds in seconds — default for local dev
-python -m app.database.seed --scale demo    # a fuller demo dataset
-python -m app.database.seed --scale full    # ~spec scale: 50K customers, 5K products, 3 years — slow, needs a real machine
+python scripts/generate_sample_data.py
 ```
-
-Or override any dimension directly: `python -m app.database.seed --customers 50000 --products 5000 --months 36`.
 
 ### Environment variables
 
@@ -118,13 +106,13 @@ Or override any dimension directly: `python -m app.database.seed --customers 500
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | — | PostgreSQL connection string |
 | `AI_MODE` | `demo` | `demo` (free, deterministic) or `live` (calls Gemini) |
 | `GEMINI_API_KEY` | — | required for `AI_MODE=live` |
-| `AI_DAILY_LIMIT` | `5` | AI questions per client per day |
+| `AI_DAILY_LIMIT` | `5` | "Ask Your Data" questions per client per day |
 | `AI_MAX_PROMPT_LENGTH` | `300` | max question length |
 | `AI_REQUEST_TIMEOUT_SECONDS` | `15` | timeout for the AI provider call |
 | `CORS_ALLOWED_ORIGINS` | localhost | comma-separated allowed frontend origins |
+| `MAX_REQUEST_BODY_BYTES` | 10MB | request body cap (uploads are separately capped at 8MB in `api/routes/data.py`) |
 | `BRAND_NAME` | `Orbit` | change once, the API identity follows |
 
 **Frontend** (`frontend/.env`, optional):
@@ -133,48 +121,31 @@ Or override any dimension directly: `python -m app.database.seed --customers 500
 |---|---|---|
 | `VITE_API_BASE_URL` | `/api` | backend base URL |
 | `VITE_BRAND_NAME` | `Orbit` | change once, the whole site follows (see `src/config/brand.js`) |
-| `VITE_AI_DAILY_LIMIT` | `5` | shown on the pricing section — keep in sync with the backend |
 
 Never commit `.env`. Only `.env.example` files are tracked.
 
 ## Deployment (free tier, $0/month)
 
-Three services, all with permanent free tiers and no credit card: **Neon** (Postgres), **Render** (FastAPI, via the [`render.yaml`](render.yaml) blueprint in this repo), **Vercel** (frontend, via [`frontend/vercel.json`](frontend/vercel.json) for SPA routing).
+Two services, both with permanent free tiers and no credit card: **Render** (FastAPI, via the [`render.yaml`](render.yaml) blueprint in this repo) and **Vercel** (frontend, via [`frontend/vercel.json`](frontend/vercel.json) for SPA routing). No database needed.
 
-1. **Database — [neon.tech](https://neon.tech)**
-   Create a free project and copy its connection string (`postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require`).
-
-2. **Seed it** (from your machine, pointed at Neon instead of local Postgres):
-   ```bash
-   cd backend
-   DATABASE_URL="postgresql+psycopg2://user:pass@ep-xxx.neon.tech/dbname?sslmode=require" \
-     python -m app.database.seed --scale demo
-   ```
-
-3. **Backend — [render.com](https://render.com)**
-   New → Blueprint → connect this repo. Render reads `render.yaml` and configures the service automatically. Set these three secrets in the dashboard when prompted (they're intentionally left out of the blueprint):
-   - `DATABASE_URL` — the Neon connection string from step 1
-   - `CORS_ALLOWED_ORIGINS` — leave blank for now, come back after step 4
-   - `GEMINI_API_KEY` — optional, only needed for `AI_MODE=live`
+1. **Backend — [render.com](https://render.com)**
+   New → Blueprint → connect this repo. Render reads `render.yaml` and configures the service automatically. `GEMINI_API_KEY` and `CORS_ALLOWED_ORIGINS` are left out of the blueprint on purpose — set them in the dashboard (Gemini's key is optional, only needed for `AI_MODE=live`; leave `CORS_ALLOWED_ORIGINS` blank for now, come back after step 2).
 
    Deploy, then note the resulting URL (`https://orbit-api-xxxx.onrender.com`).
 
-4. **Frontend — [vercel.com](https://vercel.com)**
-   New Project → import this repo → set **Root Directory** to `frontend`. Add an environment variable `VITE_API_BASE_URL` = `https://orbit-api-xxxx.onrender.com/api` (your Render URL from step 3, with `/api` appended). Deploy, then note the resulting URL (`https://orbit.vercel.app`).
+2. **Frontend — [vercel.com](https://vercel.com)**
+   New Project → import this repo → set **Root Directory** to `frontend`. Add an environment variable `VITE_API_BASE_URL` = `https://orbit-api-xxxx.onrender.com/api` (your Render URL from step 1, with `/api` appended). Deploy, then note the resulting URL.
 
-5. **Close the loop** — back in Render, set `CORS_ALLOWED_ORIGINS` to your Vercel URL from step 4 and save (triggers a redeploy).
+3. **Close the loop** — back in Render, set `CORS_ALLOWED_ORIGINS` to your Vercel URL from step 2 and save (triggers a redeploy).
 
-6. **Keep the backend warm (optional but recommended)** — Render's free tier sleeps after 15 minutes idle, giving the first visitor after a quiet spell a 30-60s wait. This repo includes [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml), which pings `/health` every 10 minutes. Add a repository secret named `BACKEND_HEALTH_URL` (Settings → Secrets and variables → Actions) set to `https://orbit-api-xxxx.onrender.com/health` and it starts working immediately — no code change needed. (GitHub Actions minutes are unlimited on public repos.)
+4. **Keep the backend warm (optional but recommended)** — Render's free tier sleeps after 15 minutes idle, giving the first visitor after a quiet spell a 30-60s wait. This repo includes [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml), which pings `/health` every 10 minutes. Add a repository secret named `BACKEND_HEALTH_URL` (Settings → Secrets and variables → Actions) set to `https://orbit-api-xxxx.onrender.com/health` and it starts working immediately — no code change needed. (GitHub Actions minutes are unlimited on public repos.)
 
-Even without step 6, a cold backend never breaks the site — the frontend's 20s request timeout means a visitor gets an instant local-fallback answer instead of a long wait, and switches back to live data once the backend has warmed up.
+> **Already have a Neon Postgres database from an earlier version of this project?** It's no longer used — this build has no database dependency. You can delete the `DATABASE_URL` environment variable from your Render service, and delete or pause the Neon project, with no effect on the site.
 
 ## Demo Mode / Live AI Mode
 
-The whole point of this project is that it demonstrates real capability without costing anything to run publicly:
-
-- **`AI_MODE=demo`** (default): the backend still runs real SQL against Postgres — the AI layer just phrases the answer with a deterministic template instead of calling an external model. No API key needed.
-- **`AI_MODE=live`**: the same SQL results are handed to Gemini's free tier to phrase more naturally. If that call fails for any reason (quota, network, invalid key), it transparently falls back to the demo template rather than breaking the response.
-- **No backend at all**: the frontend's `aiService.js` tries the backend first and, if it's unreachable, falls back to a local, hand-tuned demo dataset — so the public site keeps working even if the API isn't deployed.
+- **`AI_MODE=demo`** (default): the analysis engine (KPIs, charts, insights) is always real, computed from the actual uploaded data. "Ask Your Data" answers are phrased with a deterministic template instead of calling an external model. No API key needed.
+- **`AI_MODE=live`**: the same computed numbers are handed to Gemini's free tier to phrase more naturally. If that call fails for any reason (quota, network, invalid key), it transparently falls back to the demo template rather than breaking the response.
 
 This is why the live site can sit on a free-tier host indefinitely without an AI bill.
 
@@ -182,14 +153,15 @@ This is why the live site can sit on a free-tier host indefinitely without an AI
 
 - Server-side only API keys — never exposed to the frontend, never called directly from the browser.
 - Per-client daily AI question limit (`AI_DAILY_LIMIT`), plus a general per-IP request-rate limiter.
+- Uploaded files are capped at 8MB and validated by extension and content before parsing; unreadable or empty files return a clear error instead of a crash.
 - Maximum prompt/response length and request timeout on every AI call.
-- Short-lived answer cache so repeated questions (e.g. the suggested-question chips) don't re-invoke the AI provider.
-- All analytical SQL is fixed and parameterized — the AI layer only ever explains query results, it never constructs or executes SQL itself, so there is no SQL-injection surface from AI input.
+- Short-lived answer cache, keyed by the specific dataset's content hash plus the question — so repeated questions don't re-invoke the AI provider, and a cached answer for one file is never served for a different one.
+- The AI layer only ever explains numbers `data_analysis_service.py` already computed with pandas — it never computes or invents a number itself.
 - CORS allowlist, request body size limit, and a generic error response for unhandled exceptions (real errors are logged server-side, never shown to the user).
 
 ## Tech stack
 
-React · Vite · Tailwind CSS · Recharts · Framer Motion · FastAPI · SQLAlchemy · PostgreSQL · Python/Pandas · Gemini API
+React · Vite · Tailwind CSS · Recharts · Framer Motion · FastAPI · Python/Pandas · Gemini API
 
 ## License
 

@@ -18,3 +18,12 @@ export function compactNum(value) {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
   return `${value}`
 }
+
+// Charts render arbitrary detected measures (revenue, quantity, a margin
+// %, ...), so callers pass the backend-provided `unit` instead of a chart
+// hardcoding one formatter.
+export function formatByUnit(value, unit) {
+  if (unit === 'cr') return inr(value)
+  if (unit === 'pct') return pct(value)
+  return num(value)
+}

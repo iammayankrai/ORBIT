@@ -1,14 +1,13 @@
 import { motion } from 'framer-motion'
-import Button from '../ui/Button.jsx'
 import Container from '../ui/Container.jsx'
-import DashboardPreview from './DashboardPreview.jsx'
+import UploadPanel from '../upload/UploadPanel.jsx'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   show: (delay = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] } }),
 }
 
-export default function Hero() {
+export default function Hero({ onAnalyzed }) {
   return (
     <section className="relative overflow-hidden pb-20 pt-36 sm:pb-28 sm:pt-44">
       <div
@@ -23,7 +22,7 @@ export default function Hero() {
         <motion.div initial="hidden" animate="show" custom={0} variants={fadeUp}>
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-4 py-1.5 text-sm font-medium text-ink-soft shadow-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            Introducing AI Business Analyst
+            From spreadsheet to insight, instantly
           </span>
         </motion.div>
 
@@ -34,7 +33,7 @@ export default function Hero() {
           variants={fadeUp}
           className="mt-7 max-w-4xl text-balance text-[40px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[56px] lg:text-[72px]"
         >
-          Turn Your Business Data Into Decisions.
+          Turn Your Data Into Decisions.
         </motion.h1>
 
         <motion.p
@@ -44,21 +43,12 @@ export default function Hero() {
           variants={fadeUp}
           className="mt-6 max-w-2xl text-balance text-lg leading-relaxed text-ink-soft sm:text-xl"
         >
-          AI-powered business intelligence that helps you understand what happened, why it happened, and what to do next.
+          Upload your Excel or CSV and instantly get dashboards, insights and AI-powered answers.
         </motion.p>
 
-        <motion.div initial="hidden" animate="show" custom={0.24} variants={fadeUp} className="mt-9 flex flex-col gap-3 sm:flex-row">
-          <Button to="/analyst" variant="accent" size="lg">
-            Try AI Analyst
-          </Button>
-          <Button href="/#product" variant="secondary" size="lg">
-            Explore Platform
-          </Button>
+        <motion.div initial="hidden" animate="show" custom={0.26} variants={fadeUp} className="mt-11 flex w-full justify-center">
+          <UploadPanel onAnalyzed={onAnalyzed} />
         </motion.div>
-
-        <div className="mt-16 w-full sm:mt-20 lg:mt-24">
-          <DashboardPreview />
-        </div>
       </Container>
     </section>
   )

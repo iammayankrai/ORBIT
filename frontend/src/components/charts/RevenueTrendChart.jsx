@@ -1,9 +1,17 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartTooltip from './ChartTooltip.jsx'
 import { ACCENT, CHART_INK } from '../../utils/chartTheme.js'
-import { inr } from '../../utils/format.js'
+import { formatByUnit } from '../../utils/format.js'
 
-export default function RevenueTrendChart({ data, height = 260, tickInterval = 3 }) {
+export default function RevenueTrendChart({
+  data,
+  height = 260,
+  tickInterval = 3,
+  xKey = 'month',
+  yKey = 'revenue',
+  unit = 'cr',
+  name = 'Revenue',
+}) {
   return (
     <div style={{ width: '100%', height }}>
       <ResponsiveContainer>
@@ -15,7 +23,7 @@ export default function RevenueTrendChart({ data, height = 260, tickInterval = 3
             </linearGradient>
           </defs>
           <XAxis
-            dataKey="month"
+            dataKey={xKey}
             tickLine={false}
             axisLine={{ stroke: CHART_INK.grid }}
             tick={{ fill: CHART_INK.muted, fontSize: 12 }}
@@ -24,13 +32,13 @@ export default function RevenueTrendChart({ data, height = 260, tickInterval = 3
           />
           <YAxis hide domain={['dataMin - 2', 'dataMax + 2']} />
           <Tooltip
-            content={<ChartTooltip formatter={(v) => inr(v)} />}
+            content={<ChartTooltip formatter={(v) => formatByUnit(v, unit)} />}
             cursor={{ stroke: CHART_INK.axis, strokeWidth: 1 }}
           />
           <Area
             type="monotone"
-            dataKey="revenue"
-            name="Revenue"
+            dataKey={yKey}
+            name={name}
             stroke={ACCENT}
             strokeWidth={2}
             fill="url(#revenueFill)"

@@ -1,9 +1,9 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import ChartTooltip from './ChartTooltip.jsx'
 import { CATEGORICAL } from '../../utils/chartTheme.js'
-import { inr } from '../../utils/format.js'
+import { formatByUnit } from '../../utils/format.js'
 
-export default function CategoryDonut({ data, nameKey = 'name', valueKey = 'value', height = 260 }) {
+export default function CategoryDonut({ data, nameKey = 'name', valueKey = 'value', unit = 'cr', height = 260 }) {
   const total = data.reduce((sum, d) => sum + d[valueKey], 0)
 
   return (
@@ -16,7 +16,7 @@ export default function CategoryDonut({ data, nameKey = 'name', valueKey = 'valu
                 <Cell key={row[nameKey]} fill={CATEGORICAL[i % CATEGORICAL.length]} />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltip formatter={(v) => inr(v)} />} />
+            <Tooltip content={<ChartTooltip formatter={(v) => formatByUnit(v, unit)} />} />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -28,7 +28,7 @@ export default function CategoryDonut({ data, nameKey = 'name', valueKey = 'valu
               {row[nameKey]}
             </span>
             <span className="font-medium text-ink">
-              {inr(row[valueKey])} <span className="text-ink-faint">· {Math.round((row[valueKey] / total) * 100)}%</span>
+              {formatByUnit(row[valueKey], unit)} <span className="text-ink-faint">· {Math.round((row[valueKey] / total) * 100)}%</span>
             </span>
           </li>
         ))}

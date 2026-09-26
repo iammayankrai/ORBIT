@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import ai, analytics, health, inventory
+from app.api.routes import data, health
 from app.config import settings
 from app.utils.security import client_identifier, general_limiter
 
@@ -43,6 +43,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(health.router)
-app.include_router(ai.router, prefix="/api")
-app.include_router(analytics.router, prefix="/api")
-app.include_router(inventory.router, prefix="/api")
+app.include_router(data.router, prefix="/api")
