@@ -13,6 +13,7 @@ const DEFAULT_QUESTIONS = [
   'Why did sales decline?',
   'Which region performs best?',
   'What are my top products?',
+  'Show unusual trends',
   'What should I investigate?',
 ]
 
@@ -60,18 +61,14 @@ export default function AIChat({ datasetSource, title = 'Ask your data anything'
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <Sparkles size={18} className="text-accent" aria-hidden="true" />
-        <h3 className="text-lg font-semibold text-ink">{title}</h3>
-      </div>
-
-      {messages.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-surface-alt/50 px-6 py-10 text-center">
-          <p className="text-ink-soft">No questions asked yet.</p>
-          <p className="mt-1 text-sm text-ink-faint">Ask your first question to get an answer with the numbers behind it.</p>
+    <div className="flex flex-col gap-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <Sparkles size={17} className="text-accent" aria-hidden="true" />
+          <h3 className="text-base font-semibold text-ink">{title}</h3>
         </div>
-      )}
+        {messages.length === 0 && <p className="mt-1 text-[13px] text-ink-faint">Get answers backed by your uploaded dataset.</p>}
+      </div>
 
       <div className="flex flex-col gap-4" aria-live="polite">
         {messages.map((m) =>

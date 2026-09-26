@@ -8,23 +8,25 @@ const ICONS = {
   info: { Icon: Info, className: 'bg-surface-alt text-ink-faint' },
 }
 
+// A dense grid, not a tall single-column stack — 5 insights should read as
+// one compact block, not a quarter of the page.
 export default function InsightsList({ insights }) {
   if (!insights?.length) return null
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
       {insights.map((insight, i) => {
         const { Icon, className } = ICONS[insight.type] || ICONS.info
         return (
           <RevealOnScroll
             key={`${insight.type}-${i}`}
-            delay={i * 0.05}
-            className="flex items-start gap-3.5 rounded-2xl border border-border bg-white px-5 py-4"
+            delay={i * 0.04}
+            className="flex items-start gap-2.5 rounded-xl border border-border bg-white px-4 py-3"
           >
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${className}`}>
-              <Icon size={16} aria-hidden="true" />
+            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${className}`}>
+              <Icon size={13} aria-hidden="true" />
             </span>
-            <p className="text-[15px] leading-relaxed text-ink">{insight.text}</p>
+            <p className="text-[13.5px] leading-snug text-ink">{insight.text}</p>
           </RevealOnScroll>
         )
       })}

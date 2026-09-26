@@ -1,7 +1,4 @@
-import { RotateCcw } from 'lucide-react'
 import Container from '../ui/Container.jsx'
-import SectionHeader from '../ui/SectionHeader.jsx'
-import Button from '../ui/Button.jsx'
 import KPICard from '../dashboard/KPICard.jsx'
 import HealthCard from './HealthCard.jsx'
 import ChartRenderer from './ChartRenderer.jsx'
@@ -11,20 +8,20 @@ import AIChat from '../ai/AIChat.jsx'
 export default function ResultsSection({ analysis, datasetSource, onReset }) {
   const { dataset_name, health, kpis, charts, insights } = analysis
 
-  return (
-    <section id="results" className="scroll-mt-20 border-t border-border bg-surface-alt/30 py-20 sm:py-28">
-      <Container className="flex flex-col gap-14">
-        <div className="flex flex-col items-center gap-5 text-center">
-          <SectionHeader eyebrow="Results" title="Here's what your data is telling you." />
-          <Button as="button" type="button" variant="secondary" size="md" onClick={onReset}>
-            <RotateCcw size={15} aria-hidden="true" /> Analyse a different file
-          </Button>
-        </div>
+  // compute_kpis() and compute_charts() pick their "primary measure" with
+  // the same revenue > profit > quantity > cost priority, and kpis[0] is
+  // always the row/order count — so kpis[1] and the first ("trend") chart
+  // describe the same measure. Used to annotate the trend chart with its
+  // real period-over-period change instead of leaving it as a bare chart.
+  const primaryKpi = kpis?.[1]
 
-        <HealthCard health={health} datasetName={dataset_name} />
+  return (
+    <section id="results" className="scroll-mt-20 border-t border-border bg-surface-alt/30 py-10 sm:py-14">
+      <Container className="flex flex-col gap-6">
+        <HealthCard health={health} datasetName={dataset_name} onReset={onReset} />
 
         {kpis?.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
             {kpis.map((kpi) => (
               <KPICard
                 key={kpi.id}
@@ -39,10 +36,10 @@ export default function ResultsSection({ analysis, datasetSource, onReset }) {
         )}
 
         {charts?.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {charts.map((chart, i) => (
               <div key={chart.id} className={chart.type === 'trend' ? 'lg:col-span-2' : ''}>
-                <ChartRenderer chart={chart} delay={i * 0.05} />
+                <ChartRenderer chart={chart} delay={i * 0.04} annotationKpi={chart.type === 'trend' ? primaryKpi : undefined} />
               </div>
             ))}
           </div>
@@ -50,12 +47,12 @@ export default function ResultsSection({ analysis, datasetSource, onReset }) {
 
         {insights?.length > 0 && (
           <div>
-            <h3 className="mb-5 text-xl font-semibold tracking-tight text-ink">What your data is telling you</h3>
+            <h3 className="mb-3 text-base font-semibold tracking-tight text-ink">Key Insights</h3>
             <InsightsList insights={insights} />
           </div>
         )}
 
-        <div className="rounded-2xl border border-border bg-white p-6 sm:p-8">
+        <div className="rounded-2xl border border-border bg-white p-5 sm:p-6">
           <AIChat datasetSource={datasetSource} title="Ask Your Data" />
         </div>
       </Container>

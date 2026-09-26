@@ -13,16 +13,16 @@ function CardBody({ label, value, unit, deltaPct, goodDirection, sparkline }) {
   return (
     <>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-ink-soft">{label}</p>
-        {sparkline && <Sparkline data={sparkline} width={56} height={22} />}
+        <p className="text-[13px] text-ink-soft">{label}</p>
+        {sparkline && <Sparkline data={sparkline} width={48} height={20} />}
       </div>
-      <p className="mt-2 whitespace-nowrap text-[24px] font-semibold tracking-tight text-ink sm:text-[28px]">
+      <p className="mt-1.5 whitespace-nowrap text-[21px] font-semibold tracking-tight text-ink sm:text-[24px]">
         {formatValue(value, unit)}
       </p>
       {deltaPct !== null && deltaPct !== undefined && (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-1.5">
           <DeltaBadge value={deltaPct} goodDirection={goodDirection} />
-          <span className="text-xs text-ink-faint">vs prior period</span>
+          <span className="text-xs text-ink-faint">vs prior</span>
         </div>
       )}
     </>
@@ -34,7 +34,7 @@ function CardBody({ label, value, unit, deltaPct, goodDirection, sparkline }) {
 // wait on their own scroll-triggered reveal, or they can get stuck invisible
 // below the fold on short viewports).
 export default function KPICard({ label, value, unit, deltaPct, goodDirection = 'up', sparkline, delay = 0, reveal = true }) {
-  const className = 'rounded-2xl border border-border bg-white p-5 shadow-card transition-shadow duration-300 hover:shadow-card-lg'
+  const className = 'rounded-2xl border border-border bg-white p-4 shadow-card transition-shadow duration-300 hover:shadow-card-lg'
   const props = { label, value, unit, deltaPct, goodDirection, sparkline }
 
   if (!reveal) {
