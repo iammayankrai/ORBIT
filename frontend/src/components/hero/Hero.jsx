@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import Container from '../ui/Container.jsx'
 import UploadPanel from '../upload/UploadPanel.jsx'
+import HeroPreviewCards from './HeroPreviewCards.jsx'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -14,6 +15,16 @@ export default function Hero({ onAnalyzed }) {
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[640px]"
         style={{
           background: 'radial-gradient(60% 50% at 50% 0%, var(--color-accent-soft) 0%, transparent 70%)',
+        }}
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 hidden h-[760px] xl:block"
+        style={{
+          backgroundImage: 'radial-gradient(rgba(11,13,18,0.07) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
+          maskImage: 'radial-gradient(60% 55% at 50% 45%, black 0%, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(60% 55% at 50% 45%, black 0%, transparent 75%)',
         }}
         aria-hidden="true"
       />
@@ -46,7 +57,8 @@ export default function Hero({ onAnalyzed }) {
           Upload your Excel or CSV and instantly get dashboards, insights and AI-powered answers.
         </motion.p>
 
-        <motion.div initial="hidden" animate="show" custom={0.26} variants={fadeUp} className="mt-11 flex w-full justify-center">
+        <motion.div initial="hidden" animate="show" custom={0.26} variants={fadeUp} className="relative mt-11 flex w-full justify-center">
+          <HeroPreviewCards />
           <UploadPanel onAnalyzed={onAnalyzed} />
         </motion.div>
       </Container>
