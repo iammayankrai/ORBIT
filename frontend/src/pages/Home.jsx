@@ -7,6 +7,7 @@ import InventoryIntelligence from '../components/sections/InventoryIntelligence.
 import AutomatedInsights from '../components/sections/AutomatedInsights.jsx'
 import TechnologySection from '../components/sections/TechnologySection.jsx'
 import UseCases from '../components/sections/UseCases.jsx'
+import About from '../components/sections/About.jsx'
 import Pricing from '../components/sections/Pricing.jsx'
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
       <AutomatedInsights />
       <TechnologySection />
       <UseCases />
+      <About />
       <Pricing />
     </>
   )

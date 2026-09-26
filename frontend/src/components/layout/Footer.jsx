@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
-import { GithubIcon, LinkedinIcon } from './BrandIcons.jsx'
+import { LinkedinIcon } from './BrandIcons.jsx'
 import Logo from './Logo.jsx'
-import { BRAND_NAME, COMPANY } from '../../config/brand.js'
+import { BRAND_NAME, COMPANY, FOUNDER } from '../../config/brand.js'
 import Container from '../ui/Container.jsx'
 
 const COLUMNS = [
@@ -17,17 +17,9 @@ const COLUMNS = [
   {
     heading: 'Company',
     links: [
-      { label: 'About', href: '/#technology' },
+      { label: 'About', href: '/#about' },
       { label: 'Technology', href: '/#technology' },
       { label: 'Contact', href: `mailto:${COMPANY.email}` },
-    ],
-  },
-  {
-    heading: 'Resources',
-    links: [
-      { label: 'Documentation', href: COMPANY.github },
-      { label: 'GitHub', href: COMPANY.github },
-      { label: 'LinkedIn', href: COMPANY.linkedin },
     ],
   },
 ]
@@ -37,27 +29,22 @@ export default function Footer() {
     <footer className="bg-surface-dark text-white">
       <Container className="py-16 lg:py-20">
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex flex-col gap-4 sm:col-span-2 lg:col-span-1">
+          <div className="flex flex-col gap-4 sm:col-span-2 lg:col-span-2">
             <Logo dark />
             <p className="max-w-xs text-sm leading-relaxed text-white/50">
               Turn your business data into decisions — with an AI analyst that explains the why, not just the what.
             </p>
-            <div className="flex items-center gap-3 pt-1">
-              <a
-                href={COMPANY.github}
-                aria-label="GitHub"
-                className="rounded-full border border-white/15 p-2 text-white/60 transition-colors hover:border-white/30 hover:text-white"
-              >
-                <GithubIcon size={16} />
-              </a>
-              <a
-                href={COMPANY.linkedin}
-                aria-label="LinkedIn"
-                className="rounded-full border border-white/15 p-2 text-white/60 transition-colors hover:border-white/30 hover:text-white"
-              >
-                <LinkedinIcon size={16} />
-              </a>
-            </div>
+            {COMPANY.linkedin && (
+              <div className="flex items-center gap-3 pt-1">
+                <a
+                  href={COMPANY.linkedin}
+                  aria-label="LinkedIn"
+                  className="rounded-full border border-white/15 p-2 text-white/60 transition-colors hover:border-white/30 hover:text-white"
+                >
+                  <LinkedinIcon size={16} />
+                </a>
+              </div>
+            )}
           </div>
 
           {COLUMNS.map((col) => (
@@ -86,7 +73,9 @@ export default function Footer() {
           <p>
             © {COMPANY.foundedYear} {BRAND_NAME}. All rights reserved.
           </p>
-          <p>Built with data, AI and curiosity.</p>
+          <p>
+            Designed and built by <span className="text-white/70">{FOUNDER.name}</span>.
+          </p>
         </div>
       </Container>
     </footer>
