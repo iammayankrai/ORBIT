@@ -5,6 +5,7 @@ import RevealOnScroll from '../ui/RevealOnScroll.jsx'
 
 function formatValue(value, unit) {
   if (unit === 'cr') return inr(value)
+  if (unit === 'inr') return `₹${num(value)}`
   if (unit === 'pct') return pct(value, { decimals: 1 })
   return num(value)
 }

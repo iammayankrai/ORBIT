@@ -81,9 +81,9 @@ export default function UploadPanel({ onAnalyzed }) {
   return (
     <div id="upload" className="w-full max-w-xl scroll-mt-24">
       {status === 'processing' ? (
-        <div className="flex flex-col items-center gap-6 rounded-[28px] border border-border bg-white px-8 py-12 text-center shadow-card-lg">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark">
-            <FileSpreadsheet size={26} strokeWidth={1.75} aria-hidden="true" />
+        <div className="flex flex-col items-center gap-5 rounded-[28px] border border-border bg-white px-8 py-9 text-center shadow-card-lg">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark">
+            <FileSpreadsheet size={22} strokeWidth={1.75} aria-hidden="true" />
           </span>
           <div>
             <p className="text-[17px] font-semibold text-ink">Analysing {activeLabel}</p>
@@ -106,17 +106,17 @@ export default function UploadPanel({ onAnalyzed }) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
           }}
-          className={`group flex cursor-pointer flex-col items-center gap-4 rounded-[28px] border-2 border-dashed px-8 py-14 text-center shadow-card-lg transition-colors duration-200 ${
+          className={`group flex cursor-pointer flex-col items-center gap-3 rounded-[28px] border-2 border-dashed px-8 py-9 text-center shadow-card-lg transition-colors duration-200 ${
             dragActive ? 'border-accent bg-accent-soft/60' : 'border-border bg-white hover:border-accent/40 hover:bg-surface-alt/60'
           }`}
         >
           <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => handleFiles(e.target.files)} />
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark transition-transform duration-200 group-hover:scale-105">
-            <UploadCloud size={26} strokeWidth={1.75} aria-hidden="true" />
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark transition-transform duration-200 group-hover:scale-105">
+            <UploadCloud size={22} strokeWidth={1.75} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-[19px] font-semibold text-ink">Upload Your Data</p>
-            <p className="mt-1.5 text-[15px] text-ink-faint">Drag &amp; drop your Excel or CSV file, or click to browse</p>
+            <p className="text-[17px] font-semibold text-ink">Upload Your Data</p>
+            <p className="mt-1 text-sm text-ink-faint">Drag &amp; drop your Excel or CSV file, or click to browse</p>
           </div>
 
           {status === 'error' && (
@@ -132,7 +132,7 @@ export default function UploadPanel({ onAnalyzed }) {
         </div>
       )}
 
-      <div className="mt-6 flex flex-col items-center gap-3">
+      <div className="mt-4 flex flex-col items-center gap-2">
         <Button as="button" type="button" variant="secondary" size="md" onClick={handleSample} disabled={status === 'processing'}>
           Try Sample Data
         </Button>

@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-MAX_CHARTS = 5
+MAX_CHARTS = 7
 MAX_ROWS = 200_000
 SAMPLE_DATASET_LABEL = "Sales_Data_Demo.xlsx"
 _SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_sales_data.csv"
@@ -228,9 +228,16 @@ def format_pct(value: float, signed: bool = False, decimals: int = 1) -> str:
     return f"{sign}{value:.{decimals}f}%"
 
 
+def format_currency_plain(value: float) -> str:
+    sign = "-" if value < 0 else ""
+    return f"{sign}₹{format_number(abs(value))}"
+
+
 def format_value(value: float, unit: str) -> str:
     if unit == "cr":
         return format_currency_cr(value)
+    if unit == "inr":
+        return format_currency_plain(value)
     if unit == "pct":
         return format_pct(value)
     return format_number(value)
@@ -439,6 +446,42 @@ def _margin_kpi(revenue: ColumnInfo, profit: ColumnInfo, df: pd.DataFrame, bound
     }
 
 
+def _avg_value_kpi(measure: ColumnInfo, order_col: str | None, df: pd.DataFrame, bounds: dict | None) -> dict | None:
+    """Average per-order (or per-row) value — a distinct, commonly-expected
+    business KPI, not just a smaller copy of the measure's total."""
+    series = pd.to_numeric(df[measure.name], errors="coerce").fillna(0)
+
+    def _avg(mask: pd.Series | None) -> float:
+        s = series[mask] if mask is not None else series
+        if order_col:
+            cnt = (df.loc[mask, order_col] if mask is not None else df[order_col]).nunique(dropna=True)
+        else:
+            cnt = int(mask.sum()) if mask is not None else len(df)
+        return (float(s.sum()) / cnt) if cnt else 0.0
+
+    total_avg = _avg(None)
+    if total_avg <= 0:
+        return None
+
+    change_pct = None
+    if bounds is not None:
+        prior_avg, current_avg = _avg(bounds["prior_mask"]), _avg(bounds["current_mask"])
+        if prior_avg > 0:
+            change_pct = round((current_avg - prior_avg) / prior_avg * 100, 1)
+
+    noun = "Order" if order_col else "Record"
+    return {
+        "id": "avg_order_value",
+        "label": f"Avg {noun} Value",
+        "value": format_value(total_avg, "inr"),
+        "raw_value": round(total_avg, 2),
+        "change_pct": change_pct,
+        "direction": None if change_pct is None else ("up" if change_pct >= 0 else "down"),
+        "good_direction": "up",
+        "unit": "inr",
+    }
+
+
 def compute_kpis(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
     bounds = period_bounds(df[schema.date_column]) if schema.date_column else None
     kpis = [_count_kpi(df, schema, bounds)]
@@ -456,21 +499,35 @@ def compute_kpis(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
     primary = revenue or profit or quantity or cost or schema.measures[0]
     primary_label = "Revenue" if primary is revenue else primary.name
     kpis.append(_measure_kpi(primary_label, primary, df, bounds, good_direction="down" if primary is cost else "up"))
+    used_measures = {id(primary)}
 
-    second = next((m for m in (profit, quantity, cost) if m is not None and m is not primary), None)
+    second = next((m for m in (profit, quantity, cost) if m is not None and id(m) not in used_measures), None)
     if second is not None:
         label = "Profit" if second is profit else ("Cost" if second is cost else second.name)
         kpis.append(_measure_kpi(label, second, df, bounds, good_direction="down" if second is cost else "up"))
+        used_measures.add(id(second))
 
     if revenue and profit:
         kpis.append(_margin_kpi(revenue, profit, df, bounds))
     else:
-        used = {id(primary), id(second)}
-        third = next((m for m in schema.measures if id(m) not in used), None)
+        third = next((m for m in schema.measures if id(m) not in used_measures), None)
         if third is not None:
             kpis.append(_measure_kpi(third.name, third, df, bounds, good_direction="down" if third.role == "cost" else "up"))
+            used_measures.add(id(third))
 
-    return kpis[:4]
+    order_col = next((c for c in schema.ids if re.search(r"order|invoice|transaction|txn", c, re.I)), None)
+    if primary.role in ("revenue", "profit", "cost", "price") and len(kpis) < 6:
+        avg_kpi = _avg_value_kpi(primary, order_col, df, bounds)
+        if avg_kpi is not None:
+            kpis.append(avg_kpi)
+
+    if len(kpis) < 6:
+        extra = next((m for m in schema.measures if id(m) not in used_measures), None)
+        if extra is not None:
+            kpis.append(_measure_kpi(extra.name, extra, df, bounds, good_direction="down" if extra.role == "cost" else "up"))
+            used_measures.add(id(extra))
+
+    return kpis[:6]
 
 
 # --------------------------------------------------------------------------
@@ -508,9 +565,9 @@ def build_trend_series(df: pd.DataFrame, date_col: str, series: pd.Series, unit:
     return out
 
 
-def top_n_breakdown(df: pd.DataFrame, dim_col: str, series: pd.Series, n: int, unit: str) -> list[dict]:
+def top_n_breakdown(df: pd.DataFrame, dim_col: str, series: pd.Series, n: int, unit: str, ascending: bool = False) -> list[dict]:
     mask = df[dim_col].notna()
-    grouped = series[mask].groupby(df.loc[mask, dim_col]).sum().sort_values(ascending=False).head(n)
+    grouped = series[mask].groupby(df.loc[mask, dim_col]).sum().sort_values(ascending=ascending).head(n)
     scale = 1e7 if unit == "cr" else 1
     return [{"name": str(idx), "value": round(float(v) / scale, 3)} for idx, v in grouped.items()]
 
@@ -613,6 +670,48 @@ def compute_charts(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
             )
             used_dims.add(rank_dim.name)
 
+            if len(data) >= 5 and len(charts) < MAX_CHARTS:
+                bottom_data = top_n_breakdown(df, rank_dim.name, series, 6, unit, ascending=True)
+                if len(bottom_data) >= 2:
+                    charts.append(
+                        {
+                            "id": f"bottom_{rank_dim.role}",
+                            "title": f"Lowest {rank_dim.name} by {primary.name}",
+                            "type": "bar-horizontal",
+                            "nameKey": "name",
+                            "valueKey": "value",
+                            "unit": unit,
+                            "data": bottom_data,
+                        }
+                    )
+
+    # A second ranking dimension (e.g. sales reps alongside products) — the
+    # same idea as rank_dim above, just not letting only the first-found one
+    # crowd out the others when a dataset offers more than one.
+    rank_dim2 = next(
+        (
+            by_role_dim[r]
+            for r in ("product", "entity", "customer")
+            if by_role_dim.get(r) and by_role_dim[r].name not in used_dims
+        ),
+        None,
+    )
+    if rank_dim2 and len(charts) < MAX_CHARTS:
+        data2 = top_n_breakdown(df, rank_dim2.name, series, 8, unit)
+        if len(data2) >= 2:
+            charts.append(
+                {
+                    "id": f"top_{rank_dim2.role}",
+                    "title": f"Top {rank_dim2.name} by {primary.name}",
+                    "type": "bar-horizontal",
+                    "nameKey": "name",
+                    "valueKey": "value",
+                    "unit": unit,
+                    "data": data2,
+                }
+            )
+            used_dims.add(rank_dim2.name)
+
     revenue_m, profit_m = by_role_measure.get("revenue"), by_role_measure.get("profit")
     margin_dim = cat_dim or geo_dim
     if revenue_m and profit_m and margin_dim and len(charts) < MAX_CHARTS:
@@ -698,6 +797,8 @@ def compute_insights(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
     primary_label = "Revenue" if primary and primary.role == "revenue" else (primary.name if primary else None)
     geo_dim = by_role_dim.get("region") or by_role_dim.get("location")
     cat_dim = by_role_dim.get("category")
+    revenue_m, profit_m = by_role_measure.get("revenue"), by_role_measure.get("profit")
+    rank_dim = by_role_dim.get("product") or by_role_dim.get("entity") or by_role_dim.get("customer")
 
     if primary and bounds:
         s = pd.to_numeric(df[primary.name], errors="coerce").fillna(0)
@@ -737,8 +838,37 @@ def compute_insights(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
                     }
                 )
 
-    rank_dim = by_role_dim.get("product") or by_role_dim.get("entity") or by_role_dim.get("customer")
-    if primary and bounds and rank_dim:
+    if primary and rank_dim and len(insights) < 8:
+        s = pd.to_numeric(df[primary.name], errors="coerce").fillna(0)
+        grand_total = float(s.sum())
+        top = top_n_breakdown(df, rank_dim.name, s, 1, "number")  # unscaled — only the share ratio matters here
+        if top and grand_total > 0:
+            share = round(top[0]["value"] / grand_total * 100, 1)
+            if share >= 3:
+                insights.append(
+                    {
+                        "type": "positive",
+                        "text": f"{top[0]['name']} is your top {rank_dim.name.lower()}, contributing {share}% of total {primary_label}.",
+                    }
+                )
+
+    if revenue_m and profit_m and (cat_dim or geo_dim) and len(insights) < 8:
+        margin_dim = cat_dim or geo_dim
+        margins = margin_breakdown(df, margin_dim.name, revenue_m.name, profit_m.name, n=50)
+        if len(margins) >= 2:
+            best_margin, worst_margin = margins[0], margins[-1]
+            if best_margin["name"] != worst_margin["name"]:
+                insights.append(
+                    {
+                        "type": "info",
+                        "text": (
+                            f"{best_margin['name']} has the strongest profit margin at {best_margin['value']:.1f}%, "
+                            f"versus {worst_margin['value']:.1f}% for {worst_margin['name']}."
+                        ),
+                    }
+                )
+
+    if primary and bounds and rank_dim and len(insights) < 8:
         unusual = detect_unusual_groups(df, rank_dim.name, primary.name, bounds)
         if unusual:
             noun = "products" if rank_dim.role == "product" else f"{rank_dim.name.lower()} entries"
@@ -761,7 +891,7 @@ def compute_insights(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
                     }
                 )
 
-    if len(insights) < 5:
+    if len(insights) < 8:
         missing_by_col = df.isna().sum().sort_values(ascending=False)
         missing_by_col = missing_by_col[missing_by_col > 0]
         if len(missing_by_col):
@@ -774,7 +904,7 @@ def compute_insights(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
                     }
                 )
 
-    return insights[:5]
+    return insights[:8]
 
 
 # --------------------------------------------------------------------------

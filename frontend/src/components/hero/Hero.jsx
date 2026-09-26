@@ -10,7 +10,7 @@ const fadeUp = {
 
 export default function Hero({ onAnalyzed }) {
   return (
-    <section className="relative overflow-hidden pb-20 pt-36 sm:pb-28 sm:pt-44">
+    <section className="relative flex min-h-screen flex-col justify-center overflow-hidden pb-10 pt-24 sm:pt-28">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[640px]"
         style={{
@@ -42,7 +42,7 @@ export default function Hero({ onAnalyzed }) {
           animate="show"
           custom={0.08}
           variants={fadeUp}
-          className="mt-7 max-w-4xl text-balance text-[40px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[56px] lg:text-[72px]"
+          className="mt-5 max-w-4xl text-balance text-[32px] font-semibold leading-[1.1] tracking-tight text-ink sm:text-[44px] lg:text-[56px]"
         >
           Turn Your Data Into Decisions.
         </motion.h1>
@@ -52,12 +52,12 @@ export default function Hero({ onAnalyzed }) {
           animate="show"
           custom={0.16}
           variants={fadeUp}
-          className="mt-6 max-w-2xl text-balance text-lg leading-relaxed text-ink-soft sm:text-xl"
+          className="mt-4 max-w-2xl text-balance text-base leading-relaxed text-ink-soft sm:text-lg"
         >
           Upload your Excel or CSV and instantly get dashboards, insights and AI-powered answers.
         </motion.p>
 
-        <motion.div initial="hidden" animate="show" custom={0.26} variants={fadeUp} className="relative mt-11 flex w-full justify-center">
+        <motion.div initial="hidden" animate="show" custom={0.26} variants={fadeUp} className="relative mt-8 flex w-full justify-center">
           <HeroPreviewCards />
           <UploadPanel onAnalyzed={onAnalyzed} />
         </motion.div>
