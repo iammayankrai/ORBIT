@@ -3,25 +3,28 @@ import Logo from './Logo.jsx'
 import { BRAND_NAME, COMPANY, FOUNDER } from '../../config/brand.js'
 import Container from '../ui/Container.jsx'
 
-const COLUMNS = [
-  {
-    heading: 'Product',
-    links: [
-      { label: 'Upload your data', href: '#upload' },
-      { label: 'How it works', href: '#how-it-works' },
-      { label: 'Sample insights', href: '#results' },
-    ],
-  },
-  {
-    heading: 'Company',
-    links: [
-      { label: 'About', href: '#about' },
-      { label: 'Contact', href: `mailto:${COMPANY.email}` },
-    ],
-  },
-]
+function buildColumns(onOpenAbout) {
+  return [
+    {
+      heading: 'Product',
+      links: [
+        { label: 'Upload your data', href: '#upload' },
+        { label: 'How it works', href: '#how-it-works' },
+        { label: 'Sample insights', href: '#results' },
+      ],
+    },
+    {
+      heading: 'Company',
+      links: [
+        { label: 'About', onClick: onOpenAbout },
+        { label: 'Contact', href: `mailto:${COMPANY.email}` },
+      ],
+    },
+  ]
+}
 
-export default function Footer() {
+export default function Footer({ onOpenAbout }) {
+  const columns = buildColumns(onOpenAbout)
   return (
     <footer className="bg-surface-dark text-white">
       <Container className="py-16 lg:py-20">
@@ -45,15 +48,25 @@ export default function Footer() {
             )}
           </div>
 
-          {COLUMNS.map((col) => (
+          {columns.map((col) => (
             <div key={col.heading}>
               <h3 className="text-sm font-semibold text-white">{col.heading}</h3>
               <ul className="mt-4 flex flex-col gap-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    <a href={link.href} className="text-sm text-white/50 transition-colors hover:text-white">
-                      {link.label}
-                    </a>
+                    {link.onClick ? (
+                      <button
+                        type="button"
+                        onClick={link.onClick}
+                        className="text-sm text-white/50 transition-colors hover:text-white"
+                      >
+                        {link.label}
+                      </button>
+                    ) : (
+                      <a href={link.href} className="text-sm text-white/50 transition-colors hover:text-white">
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>

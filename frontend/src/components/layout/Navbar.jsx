@@ -8,10 +8,9 @@ import Button from '../ui/Button.jsx'
 const NAV_LINKS = [
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Sample insights', href: '#results' },
-  { label: 'About', href: '#about' },
 ]
 
-export default function Navbar() {
+export default function Navbar({ onOpenAbout }) {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
   const location = useLocation()
@@ -48,6 +47,15 @@ export default function Navbar() {
               </a>
             </li>
           ))}
+          <li>
+            <button
+              type="button"
+              onClick={onOpenAbout}
+              className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink"
+            >
+              About
+            </button>
+          </li>
         </ul>
 
         <div className="hidden lg:flex">
@@ -84,6 +92,18 @@ export default function Navbar() {
                   </a>
                 </li>
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    onOpenAbout()
+                  }}
+                  className="block w-full rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-ink hover:bg-surface-alt"
+                >
+                  About
+                </button>
+              </li>
             </ul>
             <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
               <Button href="#upload" variant="accent" size="md" className="w-full">

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import Hero from '../components/hero/Hero.jsx'
 import HowItWorks from '../components/sections/HowItWorks.jsx'
 import ResultsSection from '../components/results/ResultsSection.jsx'
-import About from '../components/sections/About.jsx'
+import TechStack from '../components/sections/TechStack.jsx'
 import ClosingCTA from '../components/sections/ClosingCTA.jsx'
 
 export default function Home() {
@@ -37,7 +37,7 @@ export default function Home() {
       ) : (
         <HowItWorks />
       )}
-      <About />
+      <TechStack />
       <ClosingCTA />
     </>
   )
