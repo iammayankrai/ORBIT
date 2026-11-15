@@ -52,6 +52,16 @@ class AnalyzeResponse(BaseModel):
     charts: list[dict[str, Any]]
     insights: list[Insight]
     dataset_schema: DatasetSchemaOut
+    # The (possibly sampled) rows in a compact columnar layout - what the
+    # interactive dashboard filters and aggregates in the browser.
+    dataset: Optional[dict[str, Any]] = None
+
+
+class SampleInfo(BaseModel):
+    id: str
+    title: str
+    label: str
+    blurb: str
 
 
 class AIMetric(BaseModel):

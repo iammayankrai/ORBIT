@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
 from app.config import settings
-from app.schemas.data import AnalyzeResponse, AskResponse
+from app.schemas.data import AnalyzeResponse, AskResponse, SampleInfo
 from app.services import ai_service, data_analysis_service as das, rate_limiter
 from app.utils.security import client_identifier
 
@@ -12,9 +12,13 @@ router = APIRouter(prefix="/data", tags=["data"])
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 
-async def _load_dataframe(file: UploadFile | None, use_sample: bool):
+async def _load_dataframe(file: UploadFile | None, use_sample: bool, sample_id: str | None):
     if use_sample:
-        return das.load_sample_dataframe(), das.SAMPLE_DATASET_LABEL, None
+        try:
+            sid = das.resolve_sample_id(sample_id)
+            return das.load_sample_dataframe(sid), das.sample_label(sid), None
+        except das.DatasetError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="Please upload a file or try the sample dataset.")
@@ -33,9 +37,22 @@ async def _load_dataframe(file: UploadFile | None, use_sample: bool):
     return df, file.filename, content
 
 
+@router.get("/samples", response_model=list[SampleInfo])
+async def samples():
+    """The bundled demo datasets shown in the landing page's Demos gallery."""
+    return [
+        {"id": sid, "title": spec["title"], "label": spec["label"], "blurb": spec["blurb"]}
+        for sid, spec in das.SAMPLE_DATASETS.items()
+    ]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(file: UploadFile | None = File(None), use_sample: bool = Form(False)):
-    df, dataset_name, _ = await _load_dataframe(file, use_sample)
+async def analyze(
+    file: UploadFile | None = File(None),
+    use_sample: bool = Form(False),
+    sample_id: str | None = Form(None),
+):
+    df, dataset_name, _ = await _load_dataframe(file, use_sample, sample_id)
     return das.analyze(df, dataset_name)
 
 
@@ -45,6 +62,7 @@ async def ask(
     question: str = Form(...),
     file: UploadFile | None = File(None),
     use_sample: bool = Form(False),
+    sample_id: str | None = Form(None),
 ):
     question = question.strip()
     if not question:
@@ -52,7 +70,7 @@ async def ask(
     if len(question) > settings.AI_MAX_PROMPT_LENGTH:
         raise HTTPException(status_code=400, detail=f"Questions are limited to {settings.AI_MAX_PROMPT_LENGTH} characters.")
 
-    df, dataset_name, content = await _load_dataframe(file, use_sample)
+    df, dataset_name, content = await _load_dataframe(file, use_sample, sample_id)
 
     dataset_key = rate_limiter.hash_dataset(content, dataset_name)
     question_hash = rate_limiter.hash_question(dataset_key, question)

@@ -25,8 +25,65 @@ import pandas as pd
 
 MAX_CHARTS = 7
 MAX_ROWS = 200_000
-SAMPLE_DATASET_LABEL = "Sales_Data_Demo.xlsx"
-_SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_sales_data.csv"
+# The interactive dashboard runs its filters/aggregations in the browser, so
+# the rows are shipped to it once. Beyond this many rows the payload is a
+# deterministic sample (and flagged as such) to keep the free-tier instance
+# and the visitor's connection comfortable.
+MAX_DASHBOARD_ROWS = 60_000
+# ...and a wide file would still blow past that in cells, so cap those too.
+MAX_DASHBOARD_CELLS = 1_200_000
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DEFAULT_SAMPLE_ID = "sales"
+
+# id -> (label, file, date column, short description). Every dataset is
+# synthetic - see scripts/generate_demo_datasets.py.
+SAMPLE_DATASETS: dict[str, dict[str, str]] = {
+    "sales": {
+        "label": "Sales_Data_Demo.xlsx",
+        "title": "Sales Executive",
+        "file": "sample_sales_data.csv",
+        "date": "Date",
+        "blurb": "Orders, regions, products and managers across three years.",
+    },
+    "inventory": {
+        "label": "Inventory_Demo.xlsx",
+        "title": "Inventory Control",
+        "file": "sample_inventory_data.csv",
+        "date": "Date",
+        "blurb": "Stock, ageing and days of cover by warehouse and category.",
+    },
+    "procurement": {
+        "label": "Procurement_Demo.xlsx",
+        "title": "Procurement",
+        "file": "sample_procurement_data.csv",
+        "date": "PO Date",
+        "blurb": "Purchase orders, supplier delivery and price movement.",
+    },
+    "receivables": {
+        "label": "Receivables_Demo.xlsx",
+        "title": "Finance - Receivables",
+        "file": "sample_receivables_data.csv",
+        "date": "Invoice Date",
+        "blurb": "Invoices, collections, ageing buckets and overdue risk.",
+    },
+    "workforce": {
+        "label": "Workforce_Demo.xlsx",
+        "title": "HR - Workforce",
+        "file": "sample_workforce_data.csv",
+        "date": "Month",
+        "blurb": "Headcount, attrition, overtime and engagement by department.",
+    },
+    "manufacturing": {
+        "label": "Manufacturing_Demo.xlsx",
+        "title": "Manufacturing",
+        "file": "sample_manufacturing_data.csv",
+        "date": "Date",
+        "blurb": "Plant output, OEE, rejects and downtime by line and shift.",
+    },
+}
+
+SAMPLE_DATASET_LABEL = SAMPLE_DATASETS[DEFAULT_SAMPLE_ID]["label"]
 
 
 class DatasetError(Exception):
@@ -69,8 +126,20 @@ def load_dataframe(filename: str, content: bytes) -> pd.DataFrame:
     return df
 
 
-def load_sample_dataframe() -> pd.DataFrame:
-    return pd.read_csv(_SAMPLE_PATH, parse_dates=["Date"])
+def resolve_sample_id(sample_id: str | None) -> str:
+    sid = (sample_id or DEFAULT_SAMPLE_ID).strip().lower()
+    if sid not in SAMPLE_DATASETS:
+        raise DatasetError(f"Unknown demo dataset '{sample_id}'.")
+    return sid
+
+
+def sample_label(sample_id: str | None) -> str:
+    return SAMPLE_DATASETS[resolve_sample_id(sample_id)]["label"]
+
+
+def load_sample_dataframe(sample_id: str | None = None) -> pd.DataFrame:
+    spec = SAMPLE_DATASETS[resolve_sample_id(sample_id)]
+    return pd.read_csv(_DATA_DIR / spec["file"], parse_dates=[spec["date"]])
 
 
 # --------------------------------------------------------------------------
@@ -178,7 +247,9 @@ def _detect_date_column(df: pd.DataFrame) -> str | None:
         series = df[col]
         if pd.api.types.is_datetime64_any_dtype(series):
             return col
-        if series.dtype != object:
+        # pandas 3 stores text as a dedicated string dtype rather than
+        # `object`, so accept either.
+        if not (pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)):
             continue
         name_hint = bool(_DATE_NAME_PATTERN.search(col))
         if not name_hint and df[col].dropna().shape[0] > 0 and not isinstance(df[col].dropna().iloc[0], str):
@@ -912,14 +983,185 @@ def compute_insights(df: pd.DataFrame, schema: DatasetSchema) -> list[dict]:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# Dashboard payload - the dataset itself, in a compact columnar form, so the
+# browser can filter and aggregate it instantly without further round trips.
+# --------------------------------------------------------------------------
+
+_PCT_NAME = re.compile(r"%|\bpct\b|percent", re.I)
+_MONEY_NAME = re.compile(
+    r"value|amount|revenue|sales|cost|price|profit|spend|salary|\bpay\b|outstanding|invoice|"
+    r"receivable|payable|budget|expense|turnover|gmv|\binr\b|\brs\b|₹",
+    re.I,
+)
+# Measures that are averages/rates/scores - summing them would be wrong.
+_AVG_NAME = re.compile(
+    r"\bavg\b|average|\brate\b|ratio|score|%|\bpct\b|percent|price|margin|\bcover\b|days to|delay|\bage\b|\boee\b",
+    re.I,
+)
+# Point-in-time balances: across a date range the sensible total is the
+# latest snapshot, not the sum of every month's balance.
+_SNAPSHOT_NAME = re.compile(r"stock (qty|quantity|value)|headcount|\bfte\b|balance|on.?hand|closing|inventory (qty|value)", re.I)
+_DAYS_NAME = re.compile(r"\bdays?\b|\bdelay\b|\bhours?\b|\bminutes?\b", re.I)
+
+_MAX_TEXT = 60
+_PROFILE_BINS = 14
+_EPOCH = pd.Timestamp("1970-01-01")
+
+
+def measure_unit(name: str, role: str, values: pd.Series) -> str:
+    if _PCT_NAME.search(name):
+        return "pct"
+    if _DAYS_NAME.search(name):
+        return "number"
+    if role == "discount":
+        hi = values.max()
+        if pd.notna(hi) and hi <= 1.0:
+            return "frac"
+    if role in ("revenue", "profit", "cost", "price") or _MONEY_NAME.search(name):
+        return "inr"
+    return "number"
+
+
+def measure_agg(name: str, role: str, unit: str) -> str:
+    if _SNAPSHOT_NAME.search(name):
+        return "snapshot"
+    if unit in ("pct", "frac") or role in ("price", "discount") or _AVG_NAME.search(name):
+        return "avg"
+    return "sum"
+
+
+def _num_list(series: pd.Series) -> list:
+    arr = pd.to_numeric(series, errors="coerce").to_numpy(dtype=float)
+    mask = np.isnan(arr)
+    if not mask.all() and np.all(arr[~mask] == np.round(arr[~mask])) and np.abs(arr[~mask]).max() < 1e15:
+        return [None if m else int(v) for v, m in zip(arr, mask)]
+    return [None if m else round(float(v), 2) for v, m in zip(arr, mask)]
+
+
+def _text_list(series: pd.Series) -> list:
+    out = []
+    for v in series.tolist():
+        if v is None or (isinstance(v, float) and np.isnan(v)) or v is pd.NA or v is pd.NaT:
+            out.append(None)
+        else:
+            s = str(v)
+            out.append(s if len(s) <= _MAX_TEXT else s[: _MAX_TEXT - 1] + "…")
+    return out
+
+
+def _profile_column(df: pd.DataFrame, col: str, kind: str) -> dict:
+    series = df[col]
+    n = len(series)
+    missing = int(series.isna().sum())
+    prof: dict[str, Any] = {
+        "name": col,
+        "kind": kind,
+        "missing": missing,
+        "missing_pct": round(missing / n * 100, 1) if n else 0.0,
+        "distinct": int(series.nunique(dropna=True)),
+    }
+    if kind == "measure":
+        nums = pd.to_numeric(series, errors="coerce").dropna()
+        if len(nums):
+            prof.update(
+                min=round(float(nums.min()), 2),
+                max=round(float(nums.max()), 2),
+                mean=round(float(nums.mean()), 2),
+                median=round(float(nums.median()), 2),
+            )
+            counts, edges = np.histogram(nums, bins=_PROFILE_BINS)
+            prof["hist"] = [int(c) for c in counts]
+            prof["hist_range"] = [round(float(edges[0]), 2), round(float(edges[-1]), 2)]
+    elif kind == "date":
+        valid = pd.to_datetime(series, errors="coerce").dropna()
+        if len(valid):
+            prof["min"] = valid.min().strftime("%Y-%m-%d")
+            prof["max"] = valid.max().strftime("%Y-%m-%d")
+    else:
+        top = series.dropna().astype(str).value_counts().head(5)
+        prof["top"] = [{"value": str(k)[:_MAX_TEXT], "count": int(v)} for k, v in top.items()]
+    return prof
+
+
+def build_dataset_payload(df: pd.DataFrame, schema: DatasetSchema, max_rows: int | None = None) -> dict[str, Any]:
+    if max_rows is None:
+        max_rows = max(2_000, min(MAX_DASHBOARD_ROWS, MAX_DASHBOARD_CELLS // max(len(df.columns), 1)))
+    total = len(df)
+    sampled = total > max_rows
+    work = df
+    if sampled:
+        # Deterministic, evenly spaced sample - the same file always yields
+        # the same dashboard.
+        idx = np.floor(np.arange(max_rows) * (total / max_rows)).astype(int)
+        work = df.iloc[idx]
+
+    measure_roles = {m.name: m.role for m in schema.measures}
+    dim_roles = {d.name: d.role for d in schema.dimensions}
+    id_cols = set(schema.ids)
+
+    columns: list[dict[str, Any]] = []
+    date_values: list | None = None
+    measures: list[dict[str, Any]] = []
+    dimensions: list[dict[str, Any]] = []
+    extras: list[dict[str, Any]] = []
+    profile: list[dict[str, Any]] = []
+
+    for col in df.columns:
+        if col == schema.date_column:
+            parsed = pd.to_datetime(work[col], errors="coerce")
+            days = ((parsed.dt.normalize() - _EPOCH) // pd.Timedelta(days=1)).to_numpy(dtype=float)
+            date_values = [None if np.isnan(v) else int(v) for v in days]
+            columns.append({"name": col, "kind": "date"})
+            profile.append(_profile_column(df, col, "date"))
+        elif col in measure_roles:
+            role = measure_roles[col]
+            unit = measure_unit(col, role, pd.to_numeric(df[col], errors="coerce"))
+            agg = measure_agg(col, role, unit)
+            measures.append({"name": col, "role": role, "unit": unit, "agg": agg, "values": _num_list(work[col])})
+            columns.append({"name": col, "kind": "measure", "role": role, "unit": unit, "agg": agg})
+            profile.append(_profile_column(df, col, "measure"))
+        elif col in dim_roles:
+            codes, uniques = pd.factorize(work[col], sort=False)
+            dimensions.append(
+                {
+                    "name": col,
+                    "role": dim_roles[col],
+                    "dict": _text_list(pd.Series(uniques)),
+                    "codes": [int(c) for c in codes],
+                }
+            )
+            columns.append({"name": col, "kind": "dimension", "role": dim_roles[col]})
+            profile.append(_profile_column(df, col, "dimension"))
+        else:
+            kind = "id" if col in id_cols else "text"
+            extras.append({"name": col, "values": _text_list(work[col])})
+            columns.append({"name": col, "kind": kind})
+            profile.append(_profile_column(df, col, kind))
+
+    return {
+        "n": len(work),
+        "total_rows": total,
+        "sampled": sampled,
+        "columns": columns,
+        "date": {"name": schema.date_column, "values": date_values} if schema.date_column and date_values is not None else None,
+        "measures": measures,
+        "dimensions": dimensions,
+        "extras": extras,
+        "profile": profile,
+    }
+
+
 def analyze(df: pd.DataFrame, dataset_name: str) -> dict[str, Any]:
     schema = detect_schema(df)
     health = compute_health(df, schema)
     kpis = compute_kpis(df, schema)
     charts = compute_charts(df, schema)
     insights = compute_insights(df, schema)
+    dataset = build_dataset_payload(df, schema)
 
     return {
+        "dataset": dataset,
         "dataset_name": dataset_name,
         "rows": schema.row_count,
         "columns": schema.column_count,
