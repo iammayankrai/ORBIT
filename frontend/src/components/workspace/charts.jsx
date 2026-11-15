@@ -1,4 +1,7 @@
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
+import { motion } from 'framer-motion'
+import { usePrefersReducedMotion } from '../../motion/hooks.js'
+import { EASE_OUT } from '../../motion/tokens.js'
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fmtAxis, fmtPct, fmtValue } from '../../lib/fmt.js'
 
@@ -39,8 +42,22 @@ function TrendTooltip({ active, payload, unit, name }) {
 
 // type: 'area' | 'line' | 'bar'. `prior` values (if present on the data rows)
 // are drawn as a dashed comparison line.
-export function TrendChart({ data, unit, name, type = 'area', height = 300, showPrior = false, color = 'var(--accent)' }) {
+// Hold chart animation on for the first draw only: it traces in once, then is
+// switched off so later filter changes update instantly instead of replaying.
+function useDrawOnce(enabled, ms = 1500) {
+  const reduced = usePrefersReducedMotion()
+  const [on, setOn] = useState(enabled && !reduced)
+  useEffect(() => {
+    if (!on) return undefined
+    const t = setTimeout(() => setOn(false), ms)
+    return () => clearTimeout(t)
+  }, [on, ms])
+  return on
+}
+
+export function TrendChart({ data, unit, name, type = 'area', height = 300, showPrior = false, color = 'var(--accent)', animateOnMount = false }) {
   const gid = `g${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const anim = useDrawOnce(animateOnMount)
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -54,9 +71,9 @@ export function TrendChart({ data, unit, name, type = 'area', height = 300, show
         <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} minTickGap={28} interval="preserveStartEnd" />
         <YAxis tickLine={false} axisLine={false} width={50} tick={axisTick} tickFormatter={(v) => fmtAxis(v, unit)} />
         <Tooltip content={<TrendTooltip unit={unit} name={name} />} cursor={{ stroke: 'var(--line-strong)', strokeDasharray: '3 3' }} isAnimationActive={false} />
-        {type === 'bar' && <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false} />}
-        {type === 'line' && <Line dataKey="value" stroke={color} strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />}
-        {type === 'area' && <Area dataKey="value" stroke={color} strokeWidth={2.4} fill={`url(#${gid})`} isAnimationActive={false} activeDot={{ r: 4 }} />}
+        {type === 'bar' && <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={anim} animationDuration={900} animationEasing="ease-out" />}
+        {type === 'line' && <Line dataKey="value" stroke={color} strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={anim} animationDuration={1300} animationEasing="ease-out" />}
+        {type === 'area' && <Area dataKey="value" stroke={color} strokeWidth={2.4} fill={`url(#${gid})`} isAnimationActive={anim} animationDuration={1300} animationEasing="ease-out" activeDot={{ r: 4 }} />}
         {showPrior && <Line dataKey="prior" stroke="var(--ink-faint)" strokeWidth={1.6} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />}
       </ComposedChart>
     </ResponsiveContainer>
@@ -127,12 +144,13 @@ export function MiniTrend({ data, color = 'var(--accent)', height = 70 }) {
 // Ranked list with in-row bars. Clicking a row toggles it as a filter, so the
 // chart doubles as a slicer (selected rows stay bright, the rest dim).
 export function RankedBars({ rows, unit, selected, onToggle, limit = 8, color = 'var(--accent)', share = true }) {
+  const reduced = usePrefersReducedMotion()
   const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1)
   const total = rows.reduce((s, r) => s + Math.max(r.value, 0), 0)
   const anySel = selected && selected.size > 0
   return (
     <ul className="flex flex-col gap-1">
-      {rows.slice(0, limit).map((r) => {
+      {rows.slice(0, limit).map((r, idx) => {
         const on = !anySel || selected.has(r.code)
         const pct = (Math.abs(r.value) / max) * 100
         return (
@@ -147,7 +165,7 @@ export function RankedBars({ rows, unit, selected, onToggle, limit = 8, color = 
                 {r.name}
               </span>
               <span className="h-2 overflow-hidden rounded-full bg-card-alt">
-                <span className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.max(pct, 1.5)}%`, background: r.value < 0 ? 'var(--negative)' : color }} />
+                <motion.span className="block h-full rounded-full" initial={reduced ? false : { width: 0 }} animate={{ width: `${Math.max(pct, 1.5)}%` }} transition={reduced ? { duration: 0 } : { duration: 0.9, ease: EASE_OUT, delay: idx * 0.05 }} style={{ background: r.value < 0 ? 'var(--negative)' : color }} />
               </span>
               <span className="flex items-baseline gap-2 text-right">
                 <span className="text-[12.5px] font-semibold text-ink tabular">{fmtValue(r.value, unit)}</span>
@@ -162,6 +180,7 @@ export function RankedBars({ rows, unit, selected, onToggle, limit = 8, color = 
 }
 
 export function DonutChart({ rows, unit, selected, onToggle, height = 210 }) {
+  const anim = useDrawOnce(true, 1400)
   const top = rows.slice(0, 6)
   const rest = rows.slice(6)
   const data = [...top.map((r, i) => ({ ...r, color: seriesColor(i) })), ...(rest.length ? [{ code: -1, name: `${rest.length} others`, value: rest.reduce((s, r) => s + Math.max(r.value, 0), 0), color: 'var(--line-strong)' }] : [])].filter((d) => d.value > 0)
@@ -172,7 +191,7 @@ export function DonutChart({ rows, unit, selected, onToggle, height = 210 }) {
       <div className="relative shrink-0" style={{ width: height, height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius="64%" outerRadius="94%" paddingAngle={2} stroke="var(--card)" strokeWidth={2} isAnimationActive={false} onClick={(d) => d.code >= 0 && onToggle?.(d.code)}>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius="64%" outerRadius="94%" paddingAngle={2} stroke="var(--card)" strokeWidth={2} isAnimationActive={anim} animationDuration={1100} animationEasing="ease-out" onClick={(d) => d.code >= 0 && onToggle?.(d.code)}>
               {data.map((d) => (
                 <Cell key={d.code} fill={d.color} opacity={!anySel || selected.has(d.code) ? 1 : 0.3} style={{ cursor: d.code >= 0 ? 'pointer' : 'default', outline: 'none' }} />
               ))}
@@ -238,8 +257,8 @@ function HeatRow({ name, cells, ri, width, cols, min, span, unit }) {
           <div
             key={ci}
             title={has ? `${name} · ${cols[ci]}: ${fmtValue(v, unit)}` : `${name} · ${cols[ci]}: no data`}
-            className="h-7 rounded-[5px]"
-            style={{ background: has ? `color-mix(in srgb, var(--accent) ${Math.round(8 + t * 88)}%, var(--card-alt))` : 'var(--card-alt)', opacity: has ? 1 : 0.5 }}
+            className="heat-cell h-7 rounded-[5px]"
+            style={{ '--i': ri + ci, background: has ? `color-mix(in srgb, var(--accent) ${Math.round(8 + t * 88)}%, var(--card-alt))` : 'var(--card-alt)', opacity: has ? 1 : 0.5 }}
           />
         )
       })}

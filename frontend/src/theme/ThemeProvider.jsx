@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 const ThemeContext = createContext({ theme: 'dark', toggle: () => {} })
 
@@ -22,37 +23,39 @@ export function ThemeProvider({ children }) {
 
   // The attribute is flipped synchronously (not in the effect) so that charts
   // reading CSS variables during the re-render already see the new palette.
-  const toggle = useCallback(() => {
-    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
-    document.documentElement.setAttribute('data-theme', next)
-    setTheme(next)
+  //
+  // Where the browser supports View Transitions the new theme is revealed as a
+  // circle expanding from the toggle button; elsewhere (or with reduced
+  // motion) it simply switches.
+  const toggle = useCallback((event) => {
+    const root = document.documentElement
+    const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
+    const apply = () => {
+      root.setAttribute('data-theme', next)
+      flushSync(() => setTheme(next))
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!document.startViewTransition || reduced) {
+      apply()
+      return
+    }
+    // Read the origin now - React clears event.currentTarget after the handler.
+    const rect = event?.currentTarget?.getBoundingClientRect?.()
+    const x = event?.clientX || (rect ? rect.left + rect.width / 2 : window.innerWidth - 40)
+    const y = event?.clientY || (rect ? rect.top + rect.height / 2 : 40)
+    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y))
+    document
+      .startViewTransition(apply)
+      .ready.then(() => {
+        root.animate(
+          { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+          { duration: 560, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' },
+        )
+      })
+      .catch(() => {})
   }, [])
   const value = useMemo(() => ({ theme, toggle }), [theme, toggle])
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
 export const useTheme = () => useContext(ThemeContext)
-
-// Charts need real colour strings, so read the active theme's tokens once per
-// theme change instead of hard-coding two palettes in every chart.
-export function useChartColors() {
-  const { theme } = useTheme()
-  return useMemo(() => {
-    const cs = getComputedStyle(document.documentElement)
-    const v = (name) => cs.getPropertyValue(name).trim()
-    return {
-      theme,
-      accent: v('--accent'),
-      ink: v('--ink'),
-      muted: v('--ink-faint'),
-      grid: v('--line'),
-      gridStrong: v('--line-strong'),
-      card: v('--card'),
-      positive: v('--positive'),
-      negative: v('--negative'),
-      warning: v('--warning'),
-      series: ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7'].map(v),
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme])
-}

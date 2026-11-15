@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, FilterX, Search } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { EASE_OUT } from '../../motion/tokens.js'
 import { effectiveRange, hasDates, rangePresets } from '../../lib/cube.js'
 import { fmtInt, fmtIso, isoToDay } from '../../lib/fmt.js'
 
@@ -52,8 +54,9 @@ function DimFilter({ dim, selected, onChange }) {
         {n > 0 && <span className="rounded-full bg-accent px-1.5 text-[10.5px] font-semibold text-white">{n}</span>}
         <ChevronDown size={13} aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      <AnimatePresence>
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-line-strong bg-card p-2 shadow-card-lg">
+        <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.98 }} transition={{ duration: 0.22, ease: EASE_OUT }} style={{ transformOrigin: 'top left' }} className="absolute left-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-line-strong bg-card p-2 shadow-card-lg">
           {options.length > 9 && (
             <label className="mb-1.5 flex items-center gap-2 rounded-lg border border-line bg-card-alt px-2.5 py-1.5">
               <Search size={13} className="text-ink-faint" aria-hidden="true" />
@@ -80,8 +83,9 @@ function DimFilter({ dim, selected, onChange }) {
               Clear {dim.name}
             </button>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   )
 }

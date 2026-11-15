@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, UploadCloud } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { SPRING_SOFT } from '../../motion/tokens.js'
 import { useDataset } from '../../state/DatasetContext.jsx'
 
 const ACCEPTED = ['.csv', '.xlsx', '.xls']
@@ -34,7 +36,9 @@ export default function UploadPanel({ className = '', id }) {
 
   return (
     <div id={id} className={`scroll-mt-28 ${className}`}>
-      <div
+      <motion.div
+        animate={{ scale: drag ? 1.025 : 1 }}
+        transition={SPRING_SOFT}
         role="button"
         tabIndex={0}
         aria-label="Upload an Excel or CSV file"
@@ -54,18 +58,18 @@ export default function UploadPanel({ className = '', id }) {
       >
         <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => handleFiles(e.target.files)} />
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark transition-transform group-hover:scale-105">
-          <UploadCloud size={22} aria-hidden="true" />
+          <UploadCloud size={22} aria-hidden="true" className={drag ? 'animate-bounce' : ''} />
         </span>
         <div>
           <p className="text-[17px] font-semibold text-ink">Drop an Excel or CSV here</p>
           <p className="mt-1 text-[13.5px] text-ink-faint">or click to browse · .xlsx .xls .csv · up to 8 MB</p>
         </div>
         {error && (
-          <p className="flex items-center gap-2 rounded-full bg-negative/10 px-4 py-1.5 text-[13px] text-negative" role="alert" onClick={(e) => e.stopPropagation()}>
+          <motion.p initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: [-8, 7, -5, 3, 0] }} transition={{ duration: 0.5 }} className="flex items-center gap-2 rounded-full bg-negative/10 px-4 py-1.5 text-[13px] text-negative" role="alert" onClick={(e) => e.stopPropagation()}>
             <AlertTriangle size={14} aria-hidden="true" /> {error}
-          </p>
+          </motion.p>
         )}
-      </div>
+      </motion.div>
     </div>
   )
 }

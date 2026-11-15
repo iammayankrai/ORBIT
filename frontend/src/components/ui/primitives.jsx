@@ -1,10 +1,15 @@
 import { ChevronDown } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { usePrefersReducedMotion } from '../../motion/hooks.js'
+import { EASE_OUT } from '../../motion/tokens.js'
 
-export function Card({ className = '', children, ...props }) {
+// Cards rise and fade in once when they first mount (staggered via `delay`).
+// They stay mounted while filters change, so they don't replay.
+export function Card({ className = '', children, delay = 0, ...props }) {
   return (
-    <div className={`rounded-2xl border border-line bg-card ${className}`} {...props}>
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE_OUT, delay }} className={`rounded-2xl border border-line bg-card ${className}`} {...props}>
       {children}
-    </div>
+    </motion.div>
   )
 }
 
@@ -84,6 +89,7 @@ export function DeltaPill({ delta, lowerBetter = false, className = '' }) {
 }
 
 export function Sparkline({ values, color = 'var(--accent)', height = 34, className = '' }) {
+  const reduced = usePrefersReducedMotion()
   if (!values || values.length < 2) return <div style={{ height }} className={className} />
   const w = 120
   const min = Math.min(...values)
@@ -102,7 +108,7 @@ export function Sparkline({ values, color = 'var(--accent)', height = 34, classN
         </linearGradient>
       </defs>
       <path d={area} fill={`url(#${gid})`} />
-      <path d={d} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <motion.path d={d} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" initial={reduced ? false : { pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: EASE_OUT, delay: 0.3 }} />
     </svg>
   )
 }

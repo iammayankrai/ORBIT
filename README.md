@@ -27,6 +27,21 @@
 
 ![Ask AI — a plain-language question answered with real numbers](docs/screenshots/ask-your-data.png)
 
+## Motion
+
+The site's animation is one small, consistent system (`frontend/src/motion/`), built on Framer Motion plus [Lenis](https://github.com/darkroomengineering/lenis) for inertial scrolling.
+
+- **One easing language** — everything that appears uses an expo-out curve; things that travel use ease-in-out; small pops use a spring (`motion/tokens.js`).
+- **Opening sequence** — the logo draws itself behind a counter, then wipes away as the hero enters (once per session; skipped for direct dashboard links, anchors and reduced motion).
+- **Page transitions** — an accent curtain sweeps up, the route is swapped while it covers the screen, then it lifts away.
+- **Text** — headlines reveal word by word (rise + de-blur); a scroll-driven statement lights up word by word.
+- **Scroll** — smooth inertial scroll on the landing page, scrubbed parallax, an animated process rail, a nav that tucks away on scroll-down and tracks the current section, and a footer revealed from beneath the page.
+- **Hover** — cards lift and a soft glow follows the cursor; primary buttons sweep a sheen and lean toward the pointer.
+- **Theme switch** — the new theme expands as a circle from the toggle (View Transitions API; falls back to an instant switch).
+- **Dashboard** — staggered entrance, KPI numbers count up, charts draw in once (then update instantly when you filter), a tab indicator glides between tabs.
+
+Guard rails: only `transform` / `opacity` are animated (plus a short blur on headline words); reveals fire once; ambient motion (orbit rings, marquees) pauses when off-screen; hover effects are mouse-only; and **`prefers-reduced-motion` turns it all off** (no loader, no smooth-scroll, no curtain, instant content). Smooth-scroll is deliberately off in the dashboard, which is full of nested scroll areas. Set `VITE_DISABLE_INTRO=true` at build time to drop the opening loader.
+
 ## Architecture
 
 ```
@@ -65,7 +80,9 @@ frontend/src/
     insights.js           # live "what the data is saying" generation
     fmt.js                # Indian-style ₹ / L / Cr formatting and date helpers
   state/DatasetContext.jsx  # the dataset currently open (demo or upload) + its cube
-  theme/ThemeProvider.jsx   # light / dark tokens (CSS variables)
+  theme/ThemeProvider.jsx   # light / dark tokens (CSS variables), circular-reveal switch
+  motion/                   # tokens, SplitReveal, Reveal, Magnetic, Spotlight, Marquee, Parallax,
+                            # Intro loader, smooth scroll, AnimatedValue, OrbitMark / OrbitRings
   config/demos.js           # demo catalogue, work stories, FAQ copy
   config/brand.js           # change BRAND_NAME here to re-skin the whole site
 ```
@@ -143,6 +160,7 @@ python scripts/generate_demo_datasets.py       # Inventory, Procurement, Receiva
 |---|---|---|
 | `VITE_API_BASE_URL` | `/api` | backend base URL |
 | `VITE_BRAND_NAME` | `Orbit` | change once, the whole site follows (see `src/config/brand.js`) |
+| `VITE_DISABLE_INTRO` | unset | set to `true` to skip the opening loader |
 
 Never commit `.env`. Only `.env.example` files are tracked.
 

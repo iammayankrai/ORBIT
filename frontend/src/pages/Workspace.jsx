@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Check, FileSpreadsheet, Layers, LayoutDashboard, LineChart, Loader2, Sparkles, Table2, ShieldCheck, Upload } from 'lucide-react'
+import { LayoutGroup, motion } from 'framer-motion'
+import OrbitMark from '../motion/OrbitMark.jsx'
+import { EASE_OUT, SPRING_SOFT } from '../motion/tokens.js'
+import { AlertTriangle, Check, Layers, LayoutDashboard, LineChart, Loader2, Sparkles, Table2, ShieldCheck, Upload } from 'lucide-react'
 import Logo from '../components/layout/Logo.jsx'
 import ThemeToggle from '../components/layout/ThemeToggle.jsx'
 import Button from '../components/ui/Button.jsx'
@@ -38,10 +41,10 @@ function LoadingScreen({ label }) {
   return (
     <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-6">
       <div className="w-full max-w-md rounded-3xl border border-line bg-card p-8 text-center shadow-card-lg" role="status" aria-live="polite">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent-dark">
-          <FileSpreadsheet size={22} aria-hidden="true" />
+        <span className="mx-auto flex h-16 w-16 items-center justify-center">
+          <OrbitMark size={64} mode="loop" />
         </span>
-        <p className="mt-4 text-[17px] font-semibold text-ink">Building the dashboard</p>
+        <p className="mt-3 text-[17px] font-semibold text-ink">Building the dashboard</p>
         <p className="mt-1 truncate text-[13px] text-ink-faint">{label}</p>
         <ul className="mx-auto mt-6 flex max-w-[260px] flex-col gap-2.5 text-left">
           {STEPS.map((s, i) => (
@@ -80,7 +83,7 @@ function ErrorScreen({ message, onRetry }) {
 function TopBar({ label, onFile, demoId, onDemo, cube }) {
   const inputRef = useRef(null)
   return (
-    <header className="glass fixed inset-x-0 top-0 z-50 h-14 border-b border-line">
+    <motion.header className="glass fixed inset-x-0 top-0 z-50 h-14 border-b border-line" initial={{ y: '-100%' }} animate={{ y: 0 }} transition={{ duration: 0.7, ease: EASE_OUT }}>
       <div className="mx-auto flex h-full max-w-[1600px] items-center gap-3 px-4 sm:px-6">
         <Link to="/" aria-label="Orbit home" className="shrink-0">
           <Logo />
@@ -108,7 +111,7 @@ function TopBar({ label, onFile, demoId, onDemo, cube }) {
           <ThemeToggle />
         </div>
       </div>
-    </header>
+    </motion.header>
   )
 }
 
@@ -150,33 +153,38 @@ function Dashboard({ analysis, cube, source, label, demoId, onFile, onDemo }) {
         <FilterBar cube={cube} filters={filters} onChange={setFilters} rowCount={rowCount} />
         <div className="mx-auto flex max-w-[1600px] flex-col gap-0 md:flex-row">
           <nav aria-label="Dashboard sections" className="no-scrollbar sticky top-14 z-20 flex gap-1 overflow-x-auto border-b border-line bg-paper px-4 py-2 md:top-[calc(3.5rem+var(--filter-h,3.4rem)+0.5rem)] md:h-fit md:w-52 md:shrink-0 md:flex-col md:self-start md:border-b-0 md:bg-transparent md:px-4 md:py-5 sm:px-6">
-            {TABS.map((t) => {
-              const active = tab === t.id
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  aria-current={active ? 'page' : undefined}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] font-medium transition-colors ${active ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-card hover:text-ink'}`}
-                >
-                  <t.icon size={16} aria-hidden="true" />
-                  {t.label}
-                </button>
-              )
-            })}
+            <LayoutGroup id="workspace-tabs">
+              {TABS.map((t) => {
+                const active = tab === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    aria-current={active ? 'page' : undefined}
+                    className={`relative flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] font-medium transition-colors duration-300 ${active ? 'text-paper' : 'text-ink-soft hover:bg-card hover:text-ink'}`}
+                  >
+                    {active && <motion.span layoutId="tab-pill" className="absolute inset-0 rounded-xl bg-ink" transition={SPRING_SOFT} />}
+                    <t.icon size={16} aria-hidden="true" className="relative" />
+                    <span className="relative">{t.label}</span>
+                  </button>
+                )
+              })}
+            </LayoutGroup>
             <div className="mt-6 hidden rounded-xl border border-line bg-card p-3 text-[12px] leading-relaxed text-ink-faint md:block">
               <p className="font-medium text-ink">Tip</p>
               <p className="mt-1">Click any bar, slice or KPI to filter the whole dashboard. Switch the measure from the KPI cards.</p>
             </div>
           </nav>
           <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 md:pl-2">
+            <motion.div key={tab} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE_OUT }}>
             {tab === 'overview' && <Overview cube={cube} analysis={analysis} filters={filters} measure={measure} primary={primary} measures={measures} setMeasure={setMeasureName} userGrain={userGrain} setUserGrain={setUserGrain} toggleDim={toggleDim} />}
             {tab === 'trends' && <TrendsTab {...common} />}
             {tab === 'breakdown' && <BreakdownTab {...common} />}
             {tab === 'data' && <DataTab cube={cube} filters={filters} label={label} />}
             {tab === 'quality' && <QualityTab cube={cube} analysis={analysis} />}
             {tab === 'ask' && <AskTab cube={cube} source={source} measure={measure} />}
+            </motion.div>
           </main>
         </div>
       </div>

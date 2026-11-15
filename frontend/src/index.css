@@ -201,12 +201,127 @@
   }
 }
 
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ---- Smooth scroll (Lenis) ------------------------------------------------ */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+/* ---- Marquee: paused while off-screen or hovered -------------------------- */
+.marquee[data-off="true"] .marquee__track,
+.marquee:hover .marquee__track {
+  animation-play-state: paused;
+}
+
+/* ---- Cursor spotlight (see motion/Spotlight.jsx) ---------------------------- */
+.spot {
+  position: relative;
+}
+.spot__glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.45s var(--ease-out);
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%);
+}
+.spot:hover .spot__glow {
+  opacity: 1;
+}
+
+/* ---- Hero ambience ---------------------------------------------------------- */
+@keyframes drift {
+  0% {
+    transform: translate3d(-5%, -3%, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(5%, 4%, 0) scale(1.14);
+  }
+}
+.glow-drift {
+  animation: drift 18s ease-in-out infinite alternate;
+}
+
+/* Orbit rings: static tilted ellipses with a small body travelling each path. */
+@keyframes orbit-travel {
+  to {
+    offset-distance: 100%;
+  }
+}
+.orbit-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1000px;
+  height: 340px;
+  margin: -170px 0 0 -500px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 50%;
+  scale: var(--s, 1);
+  rotate: var(--r, 0deg);
+}
+.orbit-ring__body {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  offset-path: path("M 0 170 a 500 170 0 1 0 1000 0 a 500 170 0 1 0 -1000 0");
+  offset-rotate: 0deg;
+  animation: orbit-travel var(--d, 40s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+[data-off="true"] .orbit-ring__body {
+  animation-play-state: paused;
+}
+
+/* ---- Dashboard: heatmap cells fade/scale in on a diagonal -------------------- */
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+}
+.heat-cell {
+  animation: cell-in 0.7s var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 16ms);
+}
+
+/* ---- Theme switch: the circular reveal is driven from ThemeProvider ---------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
   .animate-marquee,
-  .animate-float {
+  .animate-float,
+  .glow-drift,
+  .orbit-ring__body,
+  .heat-cell {
     animation: none !important;
   }
 }

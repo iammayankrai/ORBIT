@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import AnimatedValue from '../../motion/AnimatedValue.jsx'
+import { EASE_OUT } from '../../motion/tokens.js'
 import { AlertTriangle, CheckCircle2, Info, TrendingDown, TrendingUp } from 'lucide-react'
 import {
   allowedGrains,
@@ -79,13 +82,14 @@ export function KpiStrip({ cube, filters, measure, primary, onSelect }) {
   const cols = n <= 4 ? Math.max(n, 1) : n === 5 || n === 6 || n === 9 ? 3 : 4
   const rem = n % cols
   return (
-    <div className="grid grid-cols-2 gap-3 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]" style={{ '--cols': cols }}>
+    <motion.div className="grid grid-cols-2 gap-3 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]" style={{ '--cols': cols }} initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } } }}>
       {cards.map((c, i) => {
         const active = !c.derived && c.measure === measure
         const name = c.derived ? c.label : c.measure.name
         return (
-          <button
+          <motion.button
             key={c.key}
+            variants={{ hidden: { opacity: 0, y: 26, scale: 0.97 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.8, ease: EASE_OUT } } }}
             type="button"
             disabled={c.derived}
             onClick={() => !c.derived && onSelect(c.measure.name)}
@@ -106,15 +110,17 @@ export function KpiStrip({ cube, filters, measure, primary, onSelect }) {
                 <DeltaPill delta={c.delta} lowerBetter={!c.derived && lowerIsBetter(c.measure)} />
               )}
             </div>
-            <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight text-ink tabular">{fmtValue(c.value, c.unit)}</p>
+            <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight text-ink tabular">
+              <AnimatedValue value={c.value} unit={c.unit} />
+            </p>
             <div className="mt-3 -mb-1">
               <Sparkline values={c.spark} color={active ? 'var(--accent)' : 'var(--ink-faint)'} />
             </div>
             <p className="mt-1.5 truncate text-[11.5px] text-ink-faint">{c.prior != null ? `vs ${fmtValue(c.prior, c.unit)} previous period` : c.measure?.agg === 'avg' ? 'Average' : c.measure?.agg === 'snapshot' ? 'Latest snapshot' : 'Total'}</p>
-          </button>
+          </motion.button>
         )
       })}
-    </div>
+    </motion.div>
   )
 }
 
@@ -145,7 +151,7 @@ export function TrendCard({ cube, filters, measure, measures, onMeasure, userGra
   }, [cube, filters, measure, grain])
 
   return (
-    <Card className="p-5">
+    <Card delay={0.22} className="p-5">
       <CardHeader
         title={`${measure.name} over time`}
         sub={range ? `${fmtDay(range[0])} → ${fmtDay(range[1])} · by ${GRAIN_LABEL[grain]?.toLowerCase() ?? grain}` : 'No date column detected'}
@@ -160,7 +166,7 @@ export function TrendCard({ cube, filters, measure, measures, onMeasure, userGra
       {data.length >= 2 ? (
         <>
           <div className="mt-4">
-            <TrendChart data={data} unit={measure.unit} name={measure.name} type={type} showPrior={showPrior && hasPrior} height={300} />
+            <TrendChart data={data} unit={measure.unit} name={measure.name} type={type} showPrior={showPrior && hasPrior} height={300} animateOnMount />
           </div>
           {hasPrior && (
             <label className="mt-1 inline-flex cursor-pointer items-center gap-2 text-[12px] text-ink-faint">
@@ -180,7 +186,7 @@ export function TrendCard({ cube, filters, measure, measures, onMeasure, userGra
 // Breakdown (ranked bars / donut, doubles as a slicer)
 // -------------------------------------------------------------------------
 
-export function BreakdownCard({ cube, filters, measure, initialDim, onToggle, defaultView = 'bars', className = '' }) {
+export function BreakdownCard({ cube, filters, measure, initialDim, onToggle, defaultView = 'bars', className = '', delay = 0.3 }) {
   const [dimName, setDimName] = useState(initialDim)
   const [view, setView] = useState(defaultView)
   const [all, setAll] = useState(false)
@@ -192,7 +198,7 @@ export function BreakdownCard({ cube, filters, measure, initialDim, onToggle, de
   const sortedRows = measure.agg === 'avg' && lowerIsBetter(measure) ? [...rows].reverse() : rows
 
   return (
-    <Card className={`p-5 ${className}`}>
+    <Card delay={delay} className={`p-5 ${className}`}>
       <CardHeader
         title={`${measure.name} by ${dim.name}`}
         sub={`${fmtInt(rows.length)} ${rows.length === 1 ? 'value' : 'values'}${selected?.size ? ` · ${selected.size} selected` : ' · click to filter'}`}
@@ -232,7 +238,7 @@ export function HeatmapCard({ cube, filters, measure, initialDim }) {
   const dim = cube.dimensions.find((d) => d.name === dimName) ?? cube.dimensions[0]
   const grid = useMemo(() => crossTabMonthly(cube, makeMask(cube, filters), dim, measure), [cube, filters, dim, measure])
   return (
-    <Card className="p-5">
+    <Card delay={0.62} className="p-5">
       <CardHeader
         title={`${dim.name} × month`}
         sub={`${measure.name} — darker means higher`}
@@ -278,7 +284,7 @@ export function MoversCard({ cube, filters, measure, initialDim }) {
   }
 
   return (
-    <Card className="p-5">
+    <Card delay={0.5} className="p-5">
       <CardHeader
         title="Biggest movers"
         sub={`${measure.name} by ${dim.name}, vs previous period`}
@@ -317,22 +323,22 @@ export function InsightsRail({ cube, filters, measure, health }) {
   const insights = useMemo(() => buildInsights(cube, filters, measure), [cube, filters, measure])
   return (
     <div className="flex flex-col gap-4">
-      <Card className="p-5">
+      <Card delay={0.3} className="p-5">
         <CardHeader title="What the data is saying" sub="Updates as you filter" />
         <ul className="mt-3 flex flex-col gap-3">
-          {insights.map((i) => {
+          {insights.map((i, idx) => {
             const Icon = ICONS[i.type] ?? Info
             return (
-              <li key={i.text} className="flex gap-2.5 text-[13px] leading-snug text-ink-soft">
+              <motion.li key={i.text} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, ease: EASE_OUT, delay: Math.min(0.45 + idx * 0.07, 1) }} className="flex gap-2.5 text-[13px] leading-snug text-ink-soft">
                 <Icon size={15} className={`mt-0.5 shrink-0 ${TONE[i.type]}`} aria-hidden="true" />
                 <span>{i.text}</span>
-              </li>
+              </motion.li>
             )
           })}
         </ul>
       </Card>
       {health && (
-        <Card className="p-5">
+        <Card delay={0.4} className="p-5">
           <CardHeader title="Data health" sub="From the full uploaded file" />
           <div className="mt-3 flex items-center gap-4">
             <HealthRing score={health.score} />
@@ -385,10 +391,10 @@ export default function Overview({ cube, analysis, filters, measure, primary, me
         <TrendCard cube={cube} filters={filters} measure={measure} measures={measures} onMeasure={setMeasure} userGrain={userGrain} onGrain={setUserGrain} />
         {dims.length > 0 && (
           <div className="grid gap-5 lg:grid-cols-2">
-            <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(0)} onToggle={toggleDim} />
-            <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(1)} onToggle={toggleDim} defaultView="donut" />
-            {dims.length > 2 && <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(2)} onToggle={toggleDim} />}
-            {dims.length > 3 && <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(3)} onToggle={toggleDim} />}
+            <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(0)} onToggle={toggleDim} delay={0.34} />
+            <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(1)} onToggle={toggleDim} defaultView="donut" delay={0.42} />
+            {dims.length > 2 && <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(2)} onToggle={toggleDim} delay={0.5} />}
+            {dims.length > 3 && <BreakdownCard cube={cube} filters={filters} measure={measure} initialDim={d(3)} onToggle={toggleDim} delay={0.58} />}
           </div>
         )}
         {dims.length > 0 && hasDates(cube) && <HeatmapCard cube={cube} filters={filters} measure={measure} initialDim={d(0)} />}
