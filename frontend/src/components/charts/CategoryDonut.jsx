@@ -11,7 +11,7 @@ export default function CategoryDonut({ data, nameKey = 'name', valueKey = 'valu
       <div style={{ width: height, height }} className="shrink-0">
         <ResponsiveContainer>
           <PieChart>
-            <Pie data={data} dataKey={valueKey} nameKey={nameKey} innerRadius="62%" outerRadius="90%" paddingAngle={2} stroke="#fff" strokeWidth={2}>
+            <Pie data={data} dataKey={valueKey} nameKey={nameKey} innerRadius="62%" outerRadius="90%" paddingAngle={2} stroke="var(--card)" strokeWidth={2}>
               {data.map((row, i) => (
                 <Cell key={row[nameKey]} fill={CATEGORICAL[i % CATEGORICAL.length]} />
               ))}

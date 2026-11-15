@@ -1,7 +1,7 @@
 export default function ChartTooltip({ active, payload, label, formatter }) {
   if (!active || !payload || !payload.length) return null
   return (
-    <div className="rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm shadow-card-lg">
+    <div className="rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm shadow-card-lg">
       {label && <p className="mb-1 font-medium text-ink">{label}</p>}
       <div className="flex flex-col gap-1">
         {payload.map((entry) => (

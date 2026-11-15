@@ -1,118 +1,37 @@
-import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Link, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
-import Logo from './Logo.jsx'
+import { Link } from 'react-router-dom'
 import Button from '../ui/Button.jsx'
+import Logo from './Logo.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 
-const NAV_LINKS = [
-  { label: 'How it works', href: '#how-it-works' },
-  { label: 'Sample insights', href: '#results' },
+const LINKS = [
+  { label: 'Demos', to: '/#demos' },
+  { label: 'Capabilities', to: '/#capabilities' },
+  { label: 'Process', to: '/#process' },
+  { label: 'Work', to: '/#work' },
+  { label: 'FAQ', to: '/#faq' },
 ]
 
-export default function Navbar({ onOpenAbout }) {
-  const [scrolled, setScrolled] = useState(false)
-  const [open, setOpen] = useState(false)
-  const location = useLocation()
-
-  useEffect(() => {
-    function onScroll() {
-      setScrolled(window.scrollY > 24)
-    }
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  useEffect(() => {
-    setOpen(false)
-  }, [location])
-
+export default function Navbar() {
   return (
-    <header
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled || open ? 'bg-white/80 backdrop-blur-lg border-b border-border shadow-[0_1px_0_0_rgba(11,13,18,0.03)]' : 'bg-transparent'
-      }`}
-    >
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 sm:px-8 lg:px-10" aria-label="Primary">
-        <Link to="/" aria-label="Home">
+    <header className="glass fixed inset-x-0 top-0 z-50 h-[60px] border-b border-line">
+      <div className="mx-auto flex h-full max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+        <Link to="/" aria-label="Orbit home">
           <Logo />
         </Link>
-
-        <ul className="hidden items-center gap-8 lg:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.label}>
-              <a href={link.href} className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink">
-                {link.label}
-              </a>
-            </li>
+        <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+          {LINKS.map((l) => (
+            <Link key={l.to} to={l.to} className="rounded-full px-3.5 py-1.5 text-[14px] font-medium text-ink-soft transition-colors hover:bg-card-alt hover:text-ink">
+              {l.label}
+            </Link>
           ))}
-          <li>
-            <button
-              type="button"
-              onClick={onOpenAbout}
-              className="text-[15px] font-medium text-ink-soft transition-colors hover:text-ink"
-            >
-              About
-            </button>
-          </li>
-        </ul>
-
-        <div className="hidden lg:flex">
-          <Button href="#upload" variant="accent" size="md">
-            Upload Your Data
+        </nav>
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
+          <Button to="/#upload" size="sm">
+            Upload data
           </Button>
         </div>
-
-        <button
-          type="button"
-          className="inline-flex items-center justify-center rounded-full p-2 text-ink lg:hidden"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          aria-expanded={open}
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </nav>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden border-t border-border bg-white lg:hidden"
-          >
-            <ul className="flex flex-col gap-1 px-6 py-4">
-              {NAV_LINKS.map((link) => (
-                <li key={link.label}>
-                  <a href={link.href} className="block rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink hover:bg-surface-alt">
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false)
-                    onOpenAbout()
-                  }}
-                  className="block w-full rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-ink hover:bg-surface-alt"
-                >
-                  About
-                </button>
-              </li>
-            </ul>
-            <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
-              <Button href="#upload" variant="accent" size="md" className="w-full">
-                Upload Your Data
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
     </header>
   )
 }

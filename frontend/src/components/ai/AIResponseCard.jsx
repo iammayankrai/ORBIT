@@ -43,10 +43,10 @@ function Chart({ chart }) {
 }
 
 const IMPACT_DOT = {
-  primary: 'bg-red-500',
-  negative: 'bg-red-500',
+  primary: 'bg-negative',
+  negative: 'bg-negative',
   secondary: 'bg-ink-faint',
-  positive: 'bg-emerald-500',
+  positive: 'bg-positive',
 }
 
 export default function AIResponseCard({ response }) {
@@ -54,7 +54,7 @@ export default function AIResponseCard({ response }) {
   const { answer, metrics, drivers, chart, recommendation, basis } = response
 
   return (
-    <div className="flex flex-col gap-5 rounded-2xl border border-border bg-white p-5 sm:p-6">
+    <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
       <p className="text-[17px] leading-relaxed text-ink">{answer}</p>
 
       {metrics?.length > 0 && (

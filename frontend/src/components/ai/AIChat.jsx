@@ -20,10 +20,10 @@ const DEFAULT_QUESTIONS = [
 let idCounter = 0
 const nextId = () => `msg-${++idCounter}`
 
-// `datasetSource` is `{ file }` or `{ useSample: true }` — whichever
-// dataset the results section above is currently showing. The backend has
-// no session state, so every question re-sends it.
-export default function AIChat({ datasetSource, title = 'Ask your data anything', showSuggestions = true }) {
+// `datasetSource` is `{ file }` or `{ useSample: true, sampleId }` — whichever
+// dataset the dashboard is currently showing. The backend has no session
+// state, so every question re-sends it.
+export default function AIChat({ datasetSource, title = 'Ask your data anything', showSuggestions = true, questions = DEFAULT_QUESTIONS }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -77,14 +77,14 @@ export default function AIChat({ datasetSource, title = 'Ask your data anything'
               key={m.id}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-ink px-4 py-2.5 text-[15px] text-white"
+              className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-ink px-4 py-2.5 text-[15px] text-paper"
             >
               {m.text}
             </motion.div>
           ) : (
             <motion.div key={m.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
               {m.result?.error ? (
-                <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+                <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3.5 text-sm text-ink">
                   <AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" />
                   <span>{m.result.message}</span>
                 </div>
@@ -99,7 +99,7 @@ export default function AIChat({ datasetSource, title = 'Ask your data anything'
       </div>
 
       {showSuggestions && messages.length === 0 && (
-        <SuggestedQuestions questions={DEFAULT_QUESTIONS} onSelect={submit} disabled={loading} />
+        <SuggestedQuestions questions={questions} onSelect={submit} disabled={loading} />
       )}
 
       <form onSubmit={handleSubmit} className="relative">
@@ -113,13 +113,13 @@ export default function AIChat({ datasetSource, title = 'Ask your data anything'
           onChange={(e) => setInput(e.target.value.slice(0, MAX_LENGTH))}
           placeholder="Ask a question about your data…"
           disabled={loading}
-          className="w-full rounded-full border border-border bg-white py-3.5 pl-5 pr-14 text-[15px] text-ink placeholder:text-ink-faint focus-visible:border-accent disabled:opacity-60"
+          className="w-full rounded-full border border-border bg-card py-3.5 pl-5 pr-14 text-[15px] text-ink placeholder:text-ink-faint focus-visible:border-accent disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={loading || !input.trim()}
           aria-label="Send question"
-          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-ink text-white transition-opacity disabled:opacity-30"
+          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-ink text-paper transition-opacity disabled:opacity-30"
         >
           <ArrowUp size={17} />
         </button>

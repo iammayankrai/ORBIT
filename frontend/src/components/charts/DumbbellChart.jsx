@@ -47,10 +47,10 @@ export default function DumbbellChart({
                 <span className={isDown ? 'text-red-700' : 'text-emerald-700'}>{pct(row[changeKey], { signed: true })}</span>
               </div>
               <svg viewBox="0 0 100 16" className="h-4 w-full overflow-visible" preserveAspectRatio="none">
-                <line x1="0" y1="8" x2="100" y2="8" stroke="#eef0f3" strokeWidth="1" />
-                <line x1={x1} y1="8" x2={x2} y2="8" stroke={isHovered ? dotColor : '#c3c2b7'} strokeWidth="2" strokeLinecap="round" />
-                <circle cx={x1} cy="8" r="3.5" fill="#c3c2b7" stroke="#fff" strokeWidth="1.5" />
-                <circle cx={x2} cy="8" r="4" fill={dotColor} stroke="#fff" strokeWidth="1.5" />
+                <line x1="0" y1="8" x2="100" y2="8" stroke="var(--line)" strokeWidth="1" />
+                <line x1={x1} y1="8" x2={x2} y2="8" stroke={isHovered ? dotColor : 'var(--line-strong)'} strokeWidth="2" strokeLinecap="round" />
+                <circle cx={x1} cy="8" r="3.5" fill="var(--line-strong)" stroke="var(--card)" strokeWidth="1.5" />
+                <circle cx={x2} cy="8" r="4" fill={dotColor} stroke="var(--card)" strokeWidth="1.5" />
               </svg>
               {isHovered && (
                 <div className="mt-1 flex justify-between text-xs text-ink-faint">

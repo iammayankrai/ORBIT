@@ -12,7 +12,7 @@ export default function TypingLoader() {
   }, [])
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm border border-border bg-white px-4 py-3.5">
+    <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-3.5">
       <div className="flex items-center gap-1">
         {[0, 1, 2].map((i) => (
           <motion.span

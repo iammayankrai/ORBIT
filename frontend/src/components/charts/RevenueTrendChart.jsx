@@ -42,7 +42,7 @@ export default function RevenueTrendChart({
             stroke={ACCENT}
             strokeWidth={2}
             fill="url(#revenueFill)"
-            activeDot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
           />
         </AreaChart>
       </ResponsiveContainer>

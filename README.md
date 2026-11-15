@@ -1,31 +1,45 @@
 # Orbit
 
-**Upload your Excel or CSV. Get instant dashboards, insights and AI-powered answers.** Not a fixed demo you click through — a real analysis engine that reads whatever spreadsheet you give it, detects what's in it, and builds the dashboard from that.
+**Upload your Excel or CSV. Get a full interactive dashboard in seconds.** Orbit reads whatever spreadsheet you give it, detects what is in it, and opens a workspace you can slice, compare and question — KPIs, trends, breakdowns, heatmaps, a data-quality profile, and plain-English answers.
 
 > Turn Your Data Into Decisions.
 
-![Orbit hero](docs/screenshots/hero.png)
+![Orbit landing page](docs/screenshots/hero.png)
 
-## How it works
+## What it does
 
-1. **Upload** — drag & drop a `.xlsx`/`.xls`/`.csv` file, or click **Try Sample Data** to use a bundled example (no file needed).
-2. **Analyze** — the backend detects your columns (which one is a date, which are regions/categories/products, which are revenue/cost/quantity measures), scores data quality, and flags statistical anomalies.
-3. **Visualize** — KPIs and charts are generated from *your* columns. A dataset with `Region`/`City` gets a geography breakdown; one with `Category` gets a category split; a `Product`/`Customer`/`Manager` column gets a top-N ranking. None of it is hardcoded to one dataset's schema.
-4. **Ask** — a plain-language question ("Why did sales decline?", "Which region performs best?", "What are my top products?", "What should I investigate?") gets answered with the real numbers behind it, not a guess.
+1. **Upload or open a demo** — drag in a `.xlsx` / `.xls` / `.csv`, or open one of six live demos (Sales, Inventory, Procurement, Finance, HR, Manufacturing). Every demo dataset is **entirely synthetic** — see `backend/scripts/`.
+2. **Analyse** — the backend detects the date column, the numeric measures (and whether each is a total, an average or a point-in-time snapshot) and the categories, and scores data health.
+3. **Explore** — a full-screen workspace opens. Every chart, KPI and insight is computed **in the browser** from the dataset, so filters respond instantly:
+   - **Overview** — KPI cards with period-over-period deltas and sparklines, a trend with a dashed previous-period overlay, ranked bars and share donuts that double as slicers, a dimension × month heatmap, "biggest movers", and live insights.
+   - **Trends** — stacked / multi-line trend split by any dimension, plus every measure at a glance.
+   - **Breakdown** — a matrix of every measure by any dimension, sortable, with totals.
+   - **Data** — the underlying rows: search, sort, paginate, export the filtered rows to CSV.
+   - **Quality** — health score and a profile of every column (completeness, distribution, top values).
+   - **Ask AI** — plain-language questions answered from the data.
+4. **Light and dark** themes.
 
-![Results: data health, KPIs and charts generated from the uploaded dataset](docs/screenshots/results.png)
+![Dashboard workspace — dark](docs/screenshots/results.png)
 
-![Ask Your Data — a plain-language question answered with real numbers and a chart](docs/screenshots/ask-your-data.png)
+![Dashboard workspace — light](docs/screenshots/results-light.png)
+
+![Demos gallery](docs/screenshots/demos.png)
+
+![Ask AI — a plain-language question answered with real numbers](docs/screenshots/ask-your-data.png)
 
 ## Architecture
 
 ```
-React (Vite)  →  FastAPI  →  pandas analysis engine  →  Result
-                                      ↓
-                        AI explanation (only for "Ask Your Data")
+React (Vite)  ──upload / demo id──▶  FastAPI  ──▶  pandas: schema detection, health, columnar payload
+      ▲                                                        │
+      └──────────── dataset (gzipped columnar JSON) ◀──────────┘
+      │
+      └─ in-browser "cube": filters, aggregation, period comparison, insights  (src/lib/cube.js)
+
+Ask AI:  React ──▶ FastAPI ──▶ intent detection ──▶ pandas ──▶ AI phrases the answer (optional)
 ```
 
-**No database.** Every request — `/api/data/analyze` and `/api/data/ask` — re-parses the uploaded file (or regenerates the bundled sample) from scratch and computes everything with pandas. That's a deliberate choice, not a limitation: it means there's no session state to lose when a free-tier instance restarts, no Postgres to provision, and no risk of the AI model inventing a number — every KPI, chart value and insight is computed deterministically before the AI provider ever sees it. The provider's only job is to phrase a sentence around numbers that already exist. See [`backend/app/services/data_analysis_service.py`](backend/app/services/data_analysis_service.py) (the engine) and [`ai_service.py`](backend/app/services/ai_service.py) (intent detection + orchestration for "Ask Your Data").
+**No database.** Every request re-parses the uploaded file (or loads the bundled demo) from scratch, so there is no session state to lose when a free-tier instance restarts and nothing of yours is stored. `/api/data/analyze` returns the dataset itself — dictionary-encoded dimensions and numeric columns — capped at 60,000 rows (an even, deterministic sample above that, flagged in the UI) so the browser can do all filtering locally. Every number is computed deterministically; the AI provider's only job is to phrase a sentence around numbers that already exist.
 
 The AI provider is swappable without touching any route or service code:
 
@@ -37,36 +51,43 @@ AIService
 
 **Frontend**
 ```
-frontend/
-  src/
-    components/
-      upload/       # UploadPanel (drag & drop + sample), ProcessingSequence (animated steps)
-      results/      # ResultsSection, HealthCard, ChartRenderer, InsightsList
-      ai/           # AIChat, AIResponseCard — "Ask Your Data"
-      charts/       # generic chart primitives (trend/bar/donut), unit-aware formatting
-      hero/, sections/, layout/, ui/
-    pages/Home.jsx  # owns the upload → analysis → results state
-    services/
-      dataService.js  # multipart calls to /api/data/analyze and /api/data/ask
-    config/brand.js   # change BRAND_NAME here to re-skin the whole site
+frontend/src/
+  pages/
+    Home.jsx              # landing: hero, demos gallery, process, capabilities, work, FAQ
+    Workspace.jsx         # /dashboard — top bar, filter bar, tabs; /dashboard?demo=<id> deep-links a demo
+  components/
+    workspace/            # Overview, Tabs (trends/breakdown/data/quality/ask), FilterBar, charts
+    home/                 # UploadPanel, illustration art
+    ai/                   # AIChat, AIResponseCard — "Ask AI"
+    layout/, ui/          # Navbar, Footer, ThemeToggle, buttons, cards, segmented controls
+  lib/
+    cube.js               # columnar engine: masks, group-by, time series, comparison, heatmap, CSV
+    insights.js           # live "what the data is saying" generation
+    fmt.js                # Indian-style ₹ / L / Cr formatting and date helpers
+  state/DatasetContext.jsx  # the dataset currently open (demo or upload) + its cube
+  theme/ThemeProvider.jsx   # light / dark tokens (CSS variables)
+  config/demos.js           # demo catalogue, work stories, FAQ copy
+  config/brand.js           # change BRAND_NAME here to re-skin the whole site
 ```
 
 **Backend**
 ```
 backend/
   app/
-    main.py                          # FastAPI app, CORS, rate-limit middleware
+    main.py                          # FastAPI app, CORS, gzip, rate-limit middleware
     api/routes/
-      data.py                        # POST /api/data/analyze, POST /api/data/ask
+      data.py                        # GET /api/data/samples, POST /api/data/analyze, POST /api/data/ask
       health.py
     services/
-      data_analysis_service.py       # column-role detection, health score, KPIs,
-                                      # chart generation, insight generation — the engine
-      ai_service.py                  # intent detection + context-building for "Ask Your Data"
+      data_analysis_service.py       # column-role detection, health score, KPIs, insights,
+                                      # and the columnar dataset payload — the engine
+      ai_service.py                  # intent detection + context-building for "Ask AI"
       providers/                     # base.py, demo_provider.py, gemini_provider.py
       rate_limiter.py                # in-memory daily AI limit + short-lived answer cache
-    data/sample_sales_data.csv       # bundled "Try Sample Data" dataset (~12.5K realistic rows)
-  scripts/generate_sample_data.py    # regenerates the sample dataset from scratch
+    data/sample_*_data.csv           # the six bundled, synthetic demo datasets
+  scripts/
+    generate_sample_data.py          # regenerates the Sales demo
+    generate_demo_datasets.py        # regenerates the other five (inventory, procurement, ...)
 ```
 
 ## Local Development
@@ -94,10 +115,11 @@ uvicorn app.main:app --reload --port 8000
 
 Point the frontend at it with `VITE_API_BASE_URL` (defaults to `/api`, proxied to `localhost:8000` in dev — see `frontend/vite.config.js`).
 
-To regenerate the bundled sample dataset (`app/data/sample_sales_data.csv`):
+To regenerate the bundled demo datasets:
 
 ```bash
-python scripts/generate_sample_data.py
+python scripts/generate_sample_data.py          # Sales
+python scripts/generate_demo_datasets.py       # Inventory, Procurement, Receivables, Workforce, Manufacturing
 ```
 
 ### Environment variables
